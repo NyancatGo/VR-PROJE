@@ -1,0 +1,26 @@
+fileFormatVersion: 2
+guid: 1b5feb1d9eba6cf4683983083384e92d
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - depremInfo1: {instanceID: 0}
+  - depremInfo2: {instanceID: 0}
+  - depremInfo3: {instanceID: 0}
+  - triyajInfo1: {instanceID: 0}
+  - triyajInfo2: {instanceID: 0}
+  - triyajInfo3: {instanceID: 0}
+  - yanginInfo1: {instanceID: 0}
+  - yanginInfo2: {instanceID: 0}
+  - yanginInfo3: {instanceID: 0}
+  - depremSunumKapak: {instanceID: 0}
+  - triyajSunumKapak: {instanceID: 0}
+  - yanginSunumKapak: {instanceID: 0}
+  - depremVideo: {fileID: 32900000, guid: 53e18ddd19a34054a85ddbe7bc73026a, type: 3}
+  - triyajVideo: {instanceID: 0}
+  - yanginVideo: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

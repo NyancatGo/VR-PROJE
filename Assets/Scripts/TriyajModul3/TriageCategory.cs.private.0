@@ -1,0 +1,10 @@
+using UnityEngine;
+
+public enum TriageCategory
+{
+    Unassigned,
+    Green,   // Hafif yaralı (Yürüyebilir)
+    Yellow,  // Orta yaralı
+    Red,     // Ağır yaralı (Acil müdahale)
+    Black    // Ölü / Beklenti yok
+}

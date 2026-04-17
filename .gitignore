@@ -1,0 +1,73 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emory[Cc]aptures/
+
+# Unity Asset Store and package generated files
+[Aa]ssets/AssetStoreTools*
+[Aa]ssets/Plugins/PlasticSCM*
+[Pp]ackages/Coplay/Editor/CoplayLogs/
+[Pp]ackages/Coplay/Editor/CoplayLogs/*
+[Aa]ssets/AddressableAssetsData/*/*.bin*
+[Aa]ssets/StreamingAssets/aa.meta
+[Aa]ssets/StreamingAssets/*/aa/*
+
+# IDE and generated project files
+.vs/
+.vscode/
+.idea/
+.gradle/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Build artifacts
+*.apk
+*.aab
+*.app
+*.unitypackage
+crashlytics-build.properties
+sysinfo.txt
+~UnityDirMonSyncFile~*
+
+# OS files
+.DS_Store*
+Thumbs.db
+Desktop.ini
+
+# Local assistant/tool state
+.agent/
+.claude/
+.codex/
+.copilot_tmp/
+.opencode/
+.plastic/
+.mcp.json
+opencode.json
+hidden_changes.conf
+ignore.conf
+
+# Local logs and diagnostics
+*.log
+build_*.txt

@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3ce880a5fa62b254e865e6a62c62b788, type: 3}
+  m_Name: TriyajProfile_Cinematic
+  m_EditorClassIdentifier: 
+  profileId: cinematic
+  defaultSeed: 3613
+  useRandomSeed: 0
+  tile: 2
+  gridX: 22
+  gridZ: 18
+  halfWidth: 22
+  halfDepth: 18
+  minRoofHeight: 7.5
+  entranceGapHalf: 5.5
+  triageZoneOffset: {x: 0.5, y: 0}
+  extensionZoneOffset: {x: 0, y: 0.4}
+  corridorNorthZ: 6.5
+  corridorSouthZ: 4.5
+  minimumWalkwayWidth: 3.5
+  victimPrefabs: []
+  safeZoneCenter: {x: 0, y: 0, z: 15}
+  safeZoneSize: {x: 4, y: 2, z: 4}
+  uiPanelPosition: {x: 0, y: 2.4, z: -10.5}
+  uiPanelEuler: {x: 0, y: 180, z: 0}
+  scenarioHooksEnabled: 1
+  nightLightIntensityMultiplier: 0.7
+  earthquakeDebrisMultiplier: 1
+  crowdDensityMultiplier: 1
+  compact:
+    propDensity: 0.72
+    lightDensity: 0.7
+    lightIntensityMultiplier: 0.9
+    maxObjectWarning: 950
+    maxMeshColliderWarning: 600
+    maxLightWarning: 48
+    maxShadowLightWarning: 12
+    victimCount: 4
+  balanced:
+    propDensity: 1
+    lightDensity: 1
+    lightIntensityMultiplier: 1
+    maxObjectWarning: 1400
+    maxMeshColliderWarning: 900
+    maxLightWarning: 70
+    maxShadowLightWarning: 24
+    victimCount: 6
+  cinematic:
+    propDensity: 1.35
+    lightDensity: 1.35
+    lightIntensityMultiplier: 1.2
+    maxObjectWarning: 2100
+    maxMeshColliderWarning: 1400
+    maxLightWarning: 105
+    maxShadowLightWarning: 40
+    victimCount: 8
