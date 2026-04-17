@@ -120,6 +120,45 @@ namespace TrainingAnalytics
             "deger"
         };
 
+        private static readonly string[] UnifiedPreferredColumns =
+        {
+            "sira_no",
+            "kayit_utc",
+            "kaynak",
+            "kaynak_detay",
+            "event_name",
+            "event_label",
+            "participant_key",
+            "participant_name",
+            "full_name",
+            AnalyticsParams.InstallationId,
+            AnalyticsParams.SessionId,
+            AnalyticsParams.ModuleId,
+            AnalyticsParams.ModuleName,
+            AnalyticsParams.ScenarioId,
+            AnalyticsParams.ScenarioName,
+            AnalyticsParams.TaskId,
+            AnalyticsParams.TaskName,
+            AnalyticsParams.TaskStatus,
+            AnalyticsParams.VictimId,
+            AnalyticsParams.VictimName,
+            AnalyticsParams.AssignedTriage,
+            AnalyticsParams.ActualTriage,
+            AnalyticsParams.IsCorrect,
+            AnalyticsParams.QuizId,
+            AnalyticsParams.QuizName,
+            AnalyticsParams.QuestionIndex,
+            AnalyticsParams.SelectedAnswerIndex,
+            AnalyticsParams.CorrectAnswerIndex,
+            AnalyticsParams.ScoreValue,
+            AnalyticsParams.ScorePercent,
+            AnalyticsParams.DurationSeconds,
+            AnalyticsParams.SceneName,
+            AnalyticsParams.BuildVersion,
+            AnalyticsParams.RuntimePlatform,
+            "tum_parametreler"
+        };
+
         private static readonly string[] FirestoreCollectionOrder =
         {
             "participants",
@@ -228,6 +267,15 @@ namespace TrainingAnalytics
 
                 List<Dictionary<string, object>> summaryRows = BuildSummaryRows(exportFolder, eventSnapshot, firestoreSnapshot);
                 WriteDynamicCsv(Path.Combine(exportFolder, "00_Rapor_Ozeti.csv"), summaryRows, SummaryColumns);
+
+                List<Dictionary<string, object>> unifiedRows = BuildUnifiedRows(eventSnapshot, firestoreSnapshot);
+                if (unifiedRows.Count > 0)
+                {
+                    WriteDynamicCsv(
+                        Path.Combine(exportFolder, "00_Tum_Veriler_Birlesik.csv"),
+                        unifiedRows,
+                        UnifiedPreferredColumns);
+                }
 
                 if (eventSnapshot.Count > 0)
                 {
@@ -394,6 +442,74 @@ namespace TrainingAnalytics
                     : 0;
                 AddSummaryRow(rows, "firestore_sayisi_" + collection, count.ToString(CultureInfo.InvariantCulture));
             }
+        }
+
+        private static List<Dictionary<string, object>> BuildUnifiedRows(
+            List<Dictionary<string, object>> eventRows,
+            Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
+        {
+            List<Dictionary<string, object>> unified = new List<Dictionary<string, object>>();
+
+            if (eventRows != null)
+            {
+                for (int i = 0; i < eventRows.Count; i++)
+                {
+                    Dictionary<string, object> clone = new Dictionary<string, object>(eventRows[i]);
+                    clone["kaynak"] = "firebase_analytics";
+                    clone["kaynak_detay"] = GetString(clone, "event_name", "firebase_analytics");
+                    unified.Add(clone);
+                }
+            }
+
+            if (firestoreRows != null)
+            {
+                List<string> orderedCollections = GetOrderedCollectionNames(firestoreRows);
+                for (int i = 0; i < orderedCollections.Count; i++)
+                {
+                    string collection = orderedCollections[i];
+                    if (!firestoreRows.TryGetValue(collection, out List<Dictionary<string, object>> rows) || rows == null)
+                    {
+                        continue;
+                    }
+
+                    for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+                    {
+                        Dictionary<string, object> clone = new Dictionary<string, object>(rows[rowIndex]);
+                        clone["kaynak"] = "firestore";
+                        clone["kaynak_detay"] = collection;
+                        unified.Add(clone);
+                    }
+                }
+            }
+
+            unified.Sort((a, b) =>
+            {
+                int seqA = ParseSequence(a);
+                int seqB = ParseSequence(b);
+                return seqA.CompareTo(seqB);
+            });
+
+            return unified;
+        }
+
+        private static int ParseSequence(IReadOnlyDictionary<string, object> row)
+        {
+            if (row == null || !row.TryGetValue("sira_no", out object value) || value == null)
+            {
+                return int.MaxValue;
+            }
+
+            if (value is int intValue)
+            {
+                return intValue;
+            }
+
+            if (int.TryParse(ConvertCellToString(value), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
+            {
+                return parsed;
+            }
+
+            return int.MaxValue;
         }
 
         private static List<Dictionary<string, object>> CombineFirestoreRows(

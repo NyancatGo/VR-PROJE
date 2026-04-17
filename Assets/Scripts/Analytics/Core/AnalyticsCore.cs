@@ -166,7 +166,19 @@ namespace TrainingAnalytics
 
         private void OnApplicationQuit()
         {
-            AnalyticsService.Instance?.FlushSessionTelemetry();
+            AnalyticsService service = AnalyticsService.Instance;
+            if (service != null)
+            {
+                try
+                {
+                    service.ExportLocalReport();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[AnalyticsRuntimeBootstrap] Cikista otomatik CSV export hatasi: {ex.Message}");
+                }
+            }
+
             ParticipantManager.ClearParticipant();
         }
     }
