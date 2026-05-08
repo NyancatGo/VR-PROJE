@@ -22,6 +22,7 @@
 .vscode/
 .idea/
 .gradle/
+node_modules/
 ExportedObj/
 .consulo/
 *.csproj
@@ -71,3 +72,6 @@ ignore.conf
 # Local logs and diagnostics
 *.log
 build_*.txt
+
+# CSV export dosyalari
+CSV Dosyalari/

@@ -1,0 +1,15 @@
+Assets
+Library
+Temp
+Logs
+obj
+Build
+UserSettings
+ProjectSettings
+Packages
+"CSV Dosyalari"
+functions
+*.csproj
+*.sln
+*.unitypackage
+*.unitypackage.meta
