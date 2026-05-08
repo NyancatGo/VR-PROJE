@@ -131,8 +131,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = (req.body || {}) as Record<string, unknown>;
-  const participantKey = String(body.participantKey || '');
-  const sessionId = String(body.sessionId || '');
+  const participantKey = String(body.participantKey || 'unknown_participant');
+  const sessionId = String(body.sessionId || 'unknown_session');
   const moduleId = String(body.moduleId || '');
   const message = typeof body.message === 'string' ? body.message : '';
   const conversationRaw = Array.isArray(body.conversation) ? body.conversation : [];
