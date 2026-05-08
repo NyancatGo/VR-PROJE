@@ -136,7 +136,7 @@ public class AIManager : MonoBehaviour
     [Tooltip("True ise tüm doktor chat istekleri gateway endpoint'ine gider. False ise legacy direct API path'i (debug-only).")]
     [SerializeField] private bool useGatewayForDoctorChat = true;
     [Tooltip("Vercel serverless HTTPS endpoint. Örn: https://<your-project>.vercel.app/api/modul3Chat")]
-    [SerializeField] private string gatewayEndpoint = "";
+    [SerializeField] private string gatewayEndpoint = "https://vr-proje-ai.vercel.app/api/modul3Chat";
     [Tooltip("Saniye cinsinden istek timeout'u.")]
     [SerializeField] private int gatewayTimeoutSeconds = 12;
 
@@ -849,7 +849,8 @@ public class AIManager : MonoBehaviour
 
         if (useGatewayForDoctorChat)
         {
-            if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+            string resolvedGatewayEndpoint = ResolveChatGatewayEndpoint();
+            if (string.IsNullOrWhiteSpace(resolvedGatewayEndpoint))
             {
                 Debug.LogWarning("[AIManager] useGatewayForDoctorChat=true ama gatewayEndpoint boş. Inspector'dan endpoint girilmelidir.");
                 // fall through to legacy path which itself will skip due to empty apiKey
@@ -1036,7 +1037,8 @@ public class AIManager : MonoBehaviour
     {
         if (useGatewayForDoctorChat)
         {
-            if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+            string resolvedGatewayEndpoint = ResolveChatGatewayEndpoint();
+            if (string.IsNullOrWhiteSpace(resolvedGatewayEndpoint))
             {
                 Debug.LogWarning("[AIManager] useGatewayForDoctorChat=true ama gatewayEndpoint boş. Triage hint gateway yolu atlanıyor.");
                 // fall through to legacy path which itself will skip due to empty apiKey
@@ -5660,6 +5662,21 @@ public class AIManager : MonoBehaviour
         return "unknown_session";
     }
 
+    private string ResolveChatGatewayEndpoint()
+    {
+        string configured = string.IsNullOrWhiteSpace(gatewayEndpoint)
+            ? "https://vr-proje-ai.vercel.app/api/modul3Chat"
+            : gatewayEndpoint.Trim();
+
+        if (System.Uri.TryCreate(configured, System.UriKind.Absolute, out System.Uri uri) &&
+            !string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return uri.ToString();
+        }
+
+        return "https://vr-proje-ai.vercel.app/api/modul3Chat";
+    }
+
     private string ResolveSttGatewayEndpoint()
     {
         if (!string.IsNullOrWhiteSpace(sttGatewayEndpoint))
@@ -5667,12 +5684,13 @@ public class AIManager : MonoBehaviour
             return sttGatewayEndpoint.Trim();
         }
 
-        if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+        string resolvedGatewayEndpoint = ResolveChatGatewayEndpoint();
+        if (string.IsNullOrWhiteSpace(resolvedGatewayEndpoint))
         {
             return string.Empty;
         }
 
-        string trimmed = gatewayEndpoint.Trim();
+        string trimmed = resolvedGatewayEndpoint.Trim();
         if (trimmed.EndsWith("/api/modul3Chat", System.StringComparison.OrdinalIgnoreCase))
         {
             return trimmed.Substring(0, trimmed.Length - "/api/modul3Chat".Length) + "/api/modul3Stt";
@@ -5706,7 +5724,8 @@ public class AIManager : MonoBehaviour
 
     private IEnumerator SendDoctorChatViaGateway(string userMessage, List<OpenAIMessage> history, System.Action<string, bool> onComplete)
     {
-        if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+        string resolvedGatewayEndpoint = ResolveChatGatewayEndpoint();
+        if (string.IsNullOrWhiteSpace(resolvedGatewayEndpoint))
         {
             Debug.LogWarning("[AIManager.Gateway] gatewayEndpoint boş; istek atlanıyor.");
             onComplete?.Invoke(GatewayFallbackUserMessage, false);
@@ -5746,7 +5765,16 @@ public class AIManager : MonoBehaviour
 
         string json = JsonUtility.ToJson(payload);
 
-        using (UnityWebRequest request = new UnityWebRequest(gatewayEndpoint, "POST"))
+        if (verboseConsoleLogs)
+        {
+            int convoCount = convo != null ? convo.Length : 0;
+            int messageLen = payload.message != null ? payload.message.Length : 0;
+            Debug.Log("[AIManager.Gateway] Payload messageLen=" + messageLen +
+                      " conversationCount=" + convoCount +
+                      " url=" + resolvedGatewayEndpoint);
+        }
+
+        using (UnityWebRequest request = new UnityWebRequest(resolvedGatewayEndpoint, "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -5761,18 +5789,21 @@ public class AIManager : MonoBehaviour
                           request.result == UnityWebRequest.Result.ProtocolError;
 
             long status = request.responseCode;
-            int bodyLen = request.downloadHandler != null && request.downloadHandler.text != null
-                ? request.downloadHandler.text.Length
-                : 0;
+            string responseText = request.downloadHandler != null ? request.downloadHandler.text : null;
+            int bodyLen = responseText != null ? responseText.Length : 0;
+            string bodyExcerpt = SanitizeGatewayBodyForLog(responseText);
 
             if (failed)
             {
-                Debug.LogWarning("[AIManager.Gateway] HTTP fail status=" + status + " bodyLen=" + bodyLen);
+                Debug.LogWarning("[AIManager.Gateway] HTTP fail status=" + status +
+                                 " error=" + request.error +
+                                 " url=" + resolvedGatewayEndpoint +
+                                 " bodyLen=" + bodyLen +
+                                 " body=" + bodyExcerpt);
                 onComplete?.Invoke(GatewayFallbackUserMessage, false);
                 yield break;
             }
 
-            string responseText = request.downloadHandler != null ? request.downloadHandler.text : null;
             if (string.IsNullOrWhiteSpace(responseText))
             {
                 Debug.LogWarning("[AIManager.Gateway] Boş cevap status=" + status);
@@ -5787,20 +5818,35 @@ public class AIManager : MonoBehaviour
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning("[AIManager.Gateway] JSON parse hatası: " + ex.Message + " bodyLen=" + bodyLen);
+                Debug.LogWarning("[AIManager.Gateway] JSON parse hatası: " + ex.Message +
+                                 " bodyLen=" + bodyLen +
+                                 " body=" + bodyExcerpt);
                 onComplete?.Invoke(GatewayFallbackUserMessage, false);
                 yield break;
             }
 
             if (parsed == null || !parsed.ok || string.IsNullOrWhiteSpace(parsed.answer))
             {
-                Debug.LogWarning("[AIManager.Gateway] ok=false veya boş answer status=" + status + " bodyLen=" + bodyLen);
+                string parsedError = parsed != null ? (parsed.error ?? string.Empty) : string.Empty;
+                Debug.LogWarning("[AIManager.Gateway] ok=false veya boş answer status=" + status +
+                                 " bodyLen=" + bodyLen +
+                                 " error=" + parsedError +
+                                 " body=" + bodyExcerpt);
                 onComplete?.Invoke(GatewayFallbackUserMessage, false);
                 yield break;
             }
 
             onComplete?.Invoke(parsed.answer, true);
         }
+    }
+
+    private static string SanitizeGatewayBodyForLog(string body)
+    {
+        if (string.IsNullOrEmpty(body)) return string.Empty;
+        const int Max = 500;
+        string trimmed = body.Length > Max ? body.Substring(0, Max) + "…" : body;
+        // Collapse newlines so the log stays single-line.
+        return trimmed.Replace("\r", " ").Replace("\n", " ");
     }
 }
 
@@ -6004,5 +6050,6 @@ internal class GatewayChatResponse
     public string answer;
     public string source;
     public string error;
+    public string debug;
 }
 #endregion

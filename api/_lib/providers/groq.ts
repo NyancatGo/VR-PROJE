@@ -10,7 +10,16 @@ export const groqProvider: ChatProvider = {
       throw new Error('GROQ_API_KEY missing');
     }
 
-    const model = input.model || 'llama-3.1-70b-versatile';
+    // Groq only serves a small set of models. If the caller passed a model
+    // name from a different provider (e.g. "deepseek-v4-flash") we ignore it
+    // and use a known-good Groq default — otherwise Groq returns HTTP 400.
+    const requested = (input.model || '').trim().toLowerCase();
+    const looksLikeGroq =
+      requested.startsWith('llama') ||
+      requested.startsWith('mixtral') ||
+      requested.startsWith('gemma') ||
+      requested.startsWith('qwen');
+    const model = looksLikeGroq ? input.model! : 'llama-3.1-70b-versatile';
     const messages: Array<{ role: string; content: string }> = [];
     if (input.systemPrompt) {
       messages.push({ role: 'system', content: input.systemPrompt });

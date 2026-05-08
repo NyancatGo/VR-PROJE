@@ -72,22 +72,25 @@ export async function dispatchChat(
     chain.push(k);
   }
 
-  const baseInput: ProviderInput = {
-    systemPrompt: config.system_prompt,
-    message: payload.message,
-    conversation: payload.conversation,
-    model: config.model,
-    temperature: config.temperature,
-    maxTokens: config.max_tokens,
-  };
-
+  const failures: string[] = [];
   for (let i = 0; i < chain.length; i++) {
     const name = chain[i];
     const provider = providers[name];
     if (!provider) {
       console.warn(`[modul3Chat] unknown provider in chain: ${name}`);
+      failures.push(`${name}:unknown`);
       continue;
     }
+    const baseInput: ProviderInput = {
+      systemPrompt: config.system_prompt,
+      message: payload.message,
+      conversation: payload.conversation,
+      // Only pass model to the primary provider — fallbacks must use their
+      // own provider-native default (a deepseek model name will 400 on Groq).
+      model: i === 0 ? config.model : undefined,
+      temperature: config.temperature,
+      maxTokens: config.max_tokens,
+    };
     try {
       const res = await provider.call(baseInput);
       const cleaned = stripReasoning(res.answer);
@@ -102,6 +105,7 @@ export async function dispatchChat(
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'unknown';
       console.warn(`[modul3Chat] provider=${name} failed: ${msg}`);
+      failures.push(`${name}:${msg.slice(0, 80)}`);
     }
   }
 
@@ -109,6 +113,7 @@ export async function dispatchChat(
     ok: false as const,
     error: 'AI_TEMPORARILY_UNAVAILABLE',
     answer: 'Doktor şu anda yanıt veremiyor.',
+    debug: failures.join(' | '),
   };
 }
 
@@ -156,7 +161,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       role: typeof m?.role === 'string' ? m.role : '',
       content: typeof m?.content === 'string' ? m.content : '',
     }))
-    .filter((m) => m.role && m.content);
+    .filter((m) => m.content && (m.role === 'user' || m.role === 'assistant'));
+
+  // Drop trailing duplicate of the current user message: clients sometimes
+  // append the just-sent user turn into history before posting, which
+  // produces two consecutive identical user messages downstream.
+  while (
+    conversation.length > 0 &&
+    conversation[conversation.length - 1].role === 'user' &&
+    conversation[conversation.length - 1].content.trim() === message.trim()
+  ) {
+    conversation.pop();
+  }
 
   try {
     const result = await dispatchChat({ message, conversation });
