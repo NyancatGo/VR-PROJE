@@ -16,6 +16,10 @@ export interface Modul3AiConfig {
   tts_similarity_boost: number;
   tts_style: number;
   tts_use_speaker_boost: boolean;
+  stt_enabled: boolean;
+  stt_provider: string;
+  stt_model: string;
+  stt_language: string;
 }
 
 const DEFAULTS = {
@@ -28,6 +32,9 @@ const DEFAULTS = {
   tts_stability: 0.5,
   tts_similarity_boost: 0.75,
   tts_style: 0,
+  stt_provider: 'groq',
+  stt_model: 'whisper-large-v3-turbo',
+  stt_language: 'tr',
 };
 
 const TTL_MS = 60_000;
@@ -103,6 +110,10 @@ export async function getModul3AiConfig(force = false): Promise<Modul3AiConfig> 
       : DEFAULTS.tts_similarity_boost,
     tts_style: typeof raw.tts_style === 'number' ? raw.tts_style : DEFAULTS.tts_style,
     tts_use_speaker_boost: raw.tts_use_speaker_boost !== false,
+    stt_enabled: raw.stt_enabled !== false,
+    stt_provider: raw.stt_provider || DEFAULTS.stt_provider,
+    stt_model: raw.stt_model || DEFAULTS.stt_model,
+    stt_language: raw.stt_language || DEFAULTS.stt_language,
   };
 
   cached = { value, ts: now };

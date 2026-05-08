@@ -11,6 +11,7 @@ using TMPro;
 public class VoiceInputManager : MonoBehaviour
 {
     private const string DefaultGroqApiUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
+    private const string DefaultGatewaySttUrl = "https://vr-proje-ai.vercel.app/api/modul3Stt";
     private const string MicButtonName = "Mic_Button";
     private const string MicButtonLabelName = "Mic_Label";
     private const float MicButtonPreferredWidth = 48f;
@@ -31,11 +32,15 @@ public class VoiceInputManager : MonoBehaviour
     [SerializeField] private TMP_InputField targetInputField;
     [SerializeField] private Button micButton;
     [SerializeField] private Image micIconOutline;
-    [SerializeField] private string groqApiKey = string.Empty;
-    [SerializeField] private string groqApiUrl = DefaultGroqApiUrl;
+    [SerializeField, HideInInspector] private string groqApiKey = string.Empty;
+    [SerializeField] private string sttGatewayEndpoint = DefaultGatewaySttUrl;
+    [SerializeField, HideInInspector] private string groqApiUrl = DefaultGroqApiUrl;
     [SerializeField] private string groqModel = "whisper-large-v3-turbo";
     [SerializeField] private string groqLanguage = "tr";
     [SerializeField] private int maxRecordingSeconds = 8;
+    [SerializeField] private string participantKey = "unknown_participant";
+    [SerializeField] private string sessionId = "unknown_session";
+    [SerializeField] private string moduleId = "module_3";
 
     private bool isRecording;
     private bool isUploading;
@@ -61,6 +66,25 @@ public class VoiceInputManager : MonoBehaviour
     private class GroqTranscriptionResponse
     {
         public string text = string.Empty;
+    }
+
+    [System.Serializable]
+    private class GatewayTranscriptionRequest
+    {
+        public string audioBase64;
+        public string participantKey;
+        public string sessionId;
+        public string moduleId;
+        public string model;
+        public string language;
+    }
+
+    [System.Serializable]
+    private class GatewayTranscriptionResponse
+    {
+        public bool ok;
+        public string text = string.Empty;
+        public string error = string.Empty;
     }
 
     private void Awake()
@@ -114,6 +138,34 @@ public class VoiceInputManager : MonoBehaviour
         ApplySpeechAvailabilityState();
     }
 
+    public void ConfigureGatewayTranscription(
+        string gatewayEndpoint,
+        string model,
+        string language,
+        int recordingSeconds,
+        string resolvedParticipantKey,
+        string resolvedSessionId,
+        string resolvedModuleId)
+    {
+        sttGatewayEndpoint = ResolveGatewaySttUrl(gatewayEndpoint);
+
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            groqModel = model.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            groqLanguage = language.Trim();
+        }
+
+        maxRecordingSeconds = Mathf.Max(1, recordingSeconds);
+        participantKey = ResolveSafeId(resolvedParticipantKey, "unknown_participant");
+        sessionId = ResolveSafeId(resolvedSessionId, "unknown_session");
+        moduleId = string.IsNullOrWhiteSpace(resolvedModuleId) ? "module_3" : resolvedModuleId.Trim();
+        ApplySpeechAvailabilityState();
+    }
+
     private void ToggleRecording()
     {
         float now = Time.unscaledTime;
@@ -150,9 +202,9 @@ public class VoiceInputManager : MonoBehaviour
     {
         ClearSpeechStatusMessage();
 
-        if (string.IsNullOrWhiteSpace(groqApiKey))
+        if (string.IsNullOrWhiteSpace(sttGatewayEndpoint))
         {
-            ShowSpeechUnavailableState("Groq API key girilmemis.");
+            ShowSpeechUnavailableState("Mikrofon endpoint girilmemis.");
             KeepKeyboardVisible();
             return;
         }
@@ -260,7 +312,83 @@ public class VoiceInputManager : MonoBehaviour
             StopCoroutine(transcriptionRoutine);
         }
 
-        transcriptionRoutine = StartCoroutine(PostGroqTranscriptionRequest(wavBytes));
+        transcriptionRoutine = StartCoroutine(PostGatewayTranscriptionRequest(wavBytes));
+    }
+
+    private IEnumerator PostGatewayTranscriptionRequest(byte[] wavBytes)
+    {
+        GatewayTranscriptionRequest payload = new GatewayTranscriptionRequest
+        {
+            audioBase64 = System.Convert.ToBase64String(wavBytes),
+            participantKey = ResolveSafeId(participantKey, "unknown_participant"),
+            sessionId = ResolveSafeId(sessionId, "unknown_session"),
+            moduleId = string.IsNullOrWhiteSpace(moduleId) ? "module_3" : moduleId,
+            model = groqModel,
+            language = groqLanguage
+        };
+
+        string json = JsonUtility.ToJson(payload);
+        UnityWebRequest request = null;
+        try
+        {
+            request = new UnityWebRequest(ResolveGatewaySttUrl(sttGatewayEndpoint), "POST");
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = TranscriptionTimeoutSeconds;
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+            activeTranscriptionRequest = request;
+
+            yield return request.SendWebRequest();
+
+            string responseText = request.downloadHandler != null ? request.downloadHandler.text : string.Empty;
+            bool requestFailed = request.result != UnityWebRequest.Result.Success || request.responseCode >= 400;
+            if (requestFailed)
+            {
+                Debug.LogWarning("[VoiceInputManager] Gateway transcription hatasi | Code: " + request.responseCode +
+                                 " | Error: " + request.error + " | Response: " + responseText, this);
+                FinalizeTranscriptionFailure(BuildGatewayErrorMessage(request.responseCode, request.error, responseText));
+                yield break;
+            }
+
+            GatewayTranscriptionResponse response = null;
+            if (!string.IsNullOrWhiteSpace(responseText))
+            {
+                response = JsonUtility.FromJson<GatewayTranscriptionResponse>(responseText);
+            }
+
+            if (response == null || !response.ok)
+            {
+                string error = response != null ? response.error : string.Empty;
+                FinalizeTranscriptionFailure(BuildGatewayErrorMessage(request.responseCode, request.error, error));
+                yield break;
+            }
+
+            string transcript = !string.IsNullOrWhiteSpace(response.text)
+                ? SanitizeTranscriptText(response.text)
+                : string.Empty;
+
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                Debug.LogWarning("[VoiceInputManager] Gateway transcription bos dondu. Response: " + responseText, this);
+                FinalizeTranscriptionFailure("Ses yaziya cevrilemedi. Tekrar dene.");
+                yield break;
+            }
+
+            yield return StartCoroutine(ApplyTranscriptToInputAsync(transcript));
+            FinalizeTranscriptionSuccess();
+        }
+        finally
+        {
+            if (request != null)
+            {
+                request.Dispose();
+            }
+
+            activeTranscriptionRequest = null;
+            transcriptionRoutine = null;
+        }
     }
 
     private IEnumerator PostGroqTranscriptionRequest(byte[] wavBytes)
@@ -661,6 +789,40 @@ public class VoiceInputManager : MonoBehaviour
         return "Ses gonderilemedi. Tekrar dene.";
     }
 
+    private string BuildGatewayErrorMessage(long statusCode, string requestError, string responseText)
+    {
+        string normalized = string.IsNullOrWhiteSpace(responseText) ? string.Empty : responseText.ToLowerInvariant();
+        if (normalized.Contains("stt_disabled"))
+        {
+            return "Mikrofon gecici olarak kapali.";
+        }
+
+        if (normalized.Contains("stt_secret_missing") || normalized.Contains("stt_provider_failed"))
+        {
+            return "Mikrofon servisi su an yanit vermiyor.";
+        }
+
+        if (statusCode == 429)
+        {
+            return "Mikrofon limiti dolu. Biraz sonra tekrar dene.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(requestError) &&
+            (requestError.ToLowerInvariant().Contains("resolve") ||
+             requestError.ToLowerInvariant().Contains("timed out") ||
+             requestError.ToLowerInvariant().Contains("network")))
+        {
+            return "Internet baglantisini kontrol et ve tekrar dene.";
+        }
+
+        if (statusCode >= 500)
+        {
+            return "Mikrofon servisi su an yanit vermiyor.";
+        }
+
+        return "Ses yaziya cevrilemedi. Tekrar dene.";
+    }
+
     private void DisposeRecordingClip()
     {
         if (recordingClip == null)
@@ -743,6 +905,36 @@ public class VoiceInputManager : MonoBehaviour
         }
 
         return DefaultGroqApiUrl;
+    }
+
+    private string ResolveGatewaySttUrl(string candidateUrl)
+    {
+        string trimmed = string.IsNullOrWhiteSpace(candidateUrl) ? DefaultGatewaySttUrl : candidateUrl.Trim();
+        if (System.Uri.TryCreate(trimmed, System.UriKind.Absolute, out System.Uri uri) &&
+            !string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return uri.ToString();
+        }
+
+        return DefaultGatewaySttUrl;
+    }
+
+    private string ResolveSafeId(string candidate, string fallback)
+    {
+        string value = string.IsNullOrWhiteSpace(candidate) ? fallback : candidate.Trim();
+        StringBuilder builder = new StringBuilder(value.Length);
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            bool allowed = char.IsLetterOrDigit(c) || c == '_' || c == '-';
+            if (allowed)
+            {
+                builder.Append(c);
+            }
+        }
+
+        string safe = builder.ToString();
+        return string.IsNullOrWhiteSpace(safe) ? fallback : safe;
     }
 
     private void BindButtonListener()

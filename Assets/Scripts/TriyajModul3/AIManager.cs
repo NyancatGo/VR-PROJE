@@ -173,8 +173,10 @@ public class AIManager : MonoBehaviour
     [SerializeField] private AudioSource doctorAudioSource;
 
     [Header("Doktor Mikrofonu")]
-    [SerializeField] private string groqApiKey = string.Empty;
-    [SerializeField] private string groqApiUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
+    [SerializeField, HideInInspector] private string groqApiKey = string.Empty;
+    [Tooltip("Vercel STT endpoint. Bos birakilirsa chat endpoint'inden /api/modul3Stt turetilir.")]
+    [SerializeField] private string sttGatewayEndpoint = "https://vr-proje-ai.vercel.app/api/modul3Stt";
+    [SerializeField, HideInInspector] private string groqApiUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
     [SerializeField] private string groqWhisperModel = "whisper-large-v3-turbo";
     [SerializeField] private string groqLanguage = "tr";
     [SerializeField] private int groqMaxRecordingSeconds = 8;
@@ -2695,12 +2697,14 @@ public class AIManager : MonoBehaviour
 
         if (voiceInputManager != null)
         {
-            voiceInputManager.ConfigureGroqTranscription(
-                groqApiKey,
-                groqApiUrl,
+            voiceInputManager.ConfigureGatewayTranscription(
+                ResolveSttGatewayEndpoint(),
                 groqWhisperModel,
                 groqLanguage,
-                groqMaxRecordingSeconds);
+                groqMaxRecordingSeconds,
+                ResolveParticipantKeyForGateway(),
+                ResolveSessionIdForGateway(),
+                "module_3");
         }
 
         EnsureEventSystemReady();
@@ -5654,6 +5658,27 @@ public class AIManager : MonoBehaviour
         }
 
         return "unknown_session";
+    }
+
+    private string ResolveSttGatewayEndpoint()
+    {
+        if (!string.IsNullOrWhiteSpace(sttGatewayEndpoint))
+        {
+            return sttGatewayEndpoint.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+        {
+            return string.Empty;
+        }
+
+        string trimmed = gatewayEndpoint.Trim();
+        if (trimmed.EndsWith("/api/modul3Chat", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed.Substring(0, trimmed.Length - "/api/modul3Chat".Length) + "/api/modul3Stt";
+        }
+
+        return trimmed.TrimEnd('/') + "/api/modul3Stt";
     }
 
     private GatewayChatMessage[] BuildGatewayConversation()
