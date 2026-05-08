@@ -4,6 +4,10 @@
     "api/modul3Chat.ts": {
       "memory": 256,
       "maxDuration": 30
+    },
+    "api/modul3Tts.ts": {
+      "memory": 256,
+      "maxDuration": 30
     }
   }
 }

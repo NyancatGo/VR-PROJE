@@ -43,14 +43,14 @@ public class AIManager : MonoBehaviour
     private const string CloseButtonTextName = "Close_ButtonText";
     private const string LeftControllerVisualName = "Controller Visual Left";
     private const string RightControllerVisualName = "Controller Visual Right";
-    private const string TtsVoiceListUrl = "https://api.minimax.io/v1/get_voice";
+    private const string TtsVoiceListUrl = "";
     private const int DefaultChatMaxTokens = 360;
     private const int TriageHintMaxTokens = 120;
     private const int MinDoctorChatMessageWindow = 4;
     private const int DefaultDoctorChatMessageWindow = 8;
     private const int MaxDoctorChatMessageWindow = 10;
     private const float DefaultDoctorChatTemperature = 0.45f;
-    private const string PreferredDoctorMinimaxModel = "MiniMax-M2.5";
+    private const string PreferredDoctorMinimaxModel = "deepseek-v4-flash";
     private const string DoctorReplyStylePrompt =
         "Her yaniti sadece Turkce ver. " +
         "Her zaman kisa, net, kolay anlasilir ve dogrudan yaz. " +
@@ -69,7 +69,8 @@ public class AIManager : MonoBehaviour
         "Dogru Turkce karakterleri kullan; ornek harfler: \u00e7, \u011f, \u0131, \u0130, \u00f6, \u015f, \u00fc. " +
         "Gerekmedikce tani listesi verme. Pratik, sakin ve aksiyon odakli konus. " +
         "Kullanici basit bir soru sorarsa sicak ama oz cevap ver. Kullanici tibbi durum anlatirsa en muhtemel risk ve ilk bakilacak seyi kisa bicimde soyle. " +
-        "Kullanici belirsiz, tek kelimelik veya eksik bir ifade yazarsa anlam uydurma; kisa bir netlestirici soru sor.";
+        "Kullanici belirsiz, tek kelimelik veya eksik bir ifade yazarsa anlam uydurma; kisa bir netlestirici soru sor. " +
+        "Asla <think> ya da benzeri dusunce bloklari yazma; sadece son cevabi ver.";
     private static readonly string[] PreferredDoctorTtsModels =
     {
         "speech-2.8-hd",
@@ -131,11 +132,19 @@ public class AIManager : MonoBehaviour
 
     public static AIManager Instance;
 
+    [Header("AI Gateway (Production Path)")]
+    [Tooltip("True ise tüm doktor chat istekleri gateway endpoint'ine gider. False ise legacy direct API path'i (debug-only).")]
+    [SerializeField] private bool useGatewayForDoctorChat = true;
+    [Tooltip("Vercel serverless HTTPS endpoint. Örn: https://<your-project>.vercel.app/api/modul3Chat")]
+    [SerializeField] private string gatewayEndpoint = "";
+    [Tooltip("Saniye cinsinden istek timeout'u.")]
+    [SerializeField] private int gatewayTimeoutSeconds = 12;
+
     [Header("API Ayarlari")]
-    [Tooltip("OpenAI API Key (sk- ile baslar)")]
-    public string apiKey = "BURAYA_API_KEY_YAZILACAK";
-    public string apiURL = "https://api.minimax.io/v1/chat/completions";
-    public string aiModel = "MiniMax-M2.5";
+    [Tooltip("DeepSeek API Key (sk- ile baslar)")]
+    public string apiKey = "";
+    public string apiURL = "https://api.deepseek.com/v1/chat/completions";
+    public string aiModel = "deepseek-v4-flash";
     [SerializeField] private string minimaxFallbackModel = "MiniMax-M2.5";
     [SerializeField] private int requestTimeoutSeconds = 45;
     [SerializeField] private int requestTimeoutStepSeconds = 10;
@@ -147,14 +156,16 @@ public class AIManager : MonoBehaviour
     [Header("Doktor Seslendirme")]
     [SerializeField] private bool enableDoctorSpeech = true;
     [SerializeField] private bool useElevenLabsTts = true;
-    [SerializeField] private string elevenLabsApiKey = string.Empty;
-    [SerializeField] private string elevenLabsVoiceId = "pNInz6obpgDQGcFmaJgB";
-    [SerializeField] private string elevenLabsTtsUrl = "https://api.elevenlabs.io/v1/text-to-speech/";
-    [SerializeField] private string ttsURL = "https://api.minimax.io/v1/t2a_v2";
-    [SerializeField] private string ttsModel = "speech-02-hd";
-    [SerializeField] private string ttsApiKeyOverride = string.Empty;
-    [SerializeField] private string voiceID = "Chinese (Mandarin)_Reliable_Executive";
-    [SerializeField] private int ttsSampleRate = 32000;
+    [Tooltip("Vercel TTS endpoint. Bos birakilirsa chat endpoint'inden /api/modul3Tts turetilir.")]
+    [SerializeField] private string ttsGatewayEndpoint = "https://vr-proje-ai.vercel.app/api/modul3Tts";
+    [SerializeField, HideInInspector] private string elevenLabsApiKey = string.Empty;
+    [SerializeField, HideInInspector] private string elevenLabsVoiceId = string.Empty;
+    [SerializeField, HideInInspector] private string elevenLabsTtsUrl = string.Empty;
+    [SerializeField, HideInInspector] private string ttsURL = string.Empty;
+    [SerializeField, HideInInspector] private string ttsModel = string.Empty;
+    [SerializeField, HideInInspector] private string ttsApiKeyOverride = string.Empty;
+    [SerializeField, HideInInspector] private string voiceID = string.Empty;
+    [SerializeField, HideInInspector] private int ttsSampleRate = 32000;
     [SerializeField] private int ttsTimeoutSeconds = 20;
     [SerializeField] [Range(0.8f, 1.2f)] private float doctorSpeechSpeed = 0.96f;
     [SerializeField] [Range(0.5f, 1.2f)] private float doctorSpeechVolume = 1f;
@@ -229,7 +240,8 @@ public class AIManager : MonoBehaviour
         "Each reply must naturally include three things: one likely dangerous diagnosis or syndrome, one decisive finding that would move the patient to a higher or lower urgency, and one concrete bedside check to do now. " +
         "Make the urgency direction obvious in plain Turkish, such as dusuk oncelik, orta oncelik, en acil, bekletme, or yasam bulgusu yoksa beklentisiz. " +
         "Prefer wording like: this picture suggests X; if Y is present think higher urgency, if not think lower urgency, and check Z now. " +
-        "Reply in 1 or 2 short sentences only. Keep the whole reply short, preferably under 180 characters. Do not reveal the exact triage color. Do not mention AI. Do not echo the complaint text back verbatim. Do not repeat the same wording across follow-up hints.";
+        "Reply in 1 or 2 short sentences only. Keep the whole reply short, preferably under 180 characters. Do not reveal the exact triage color. Do not mention AI. Do not echo the complaint text back verbatim. Do not repeat the same wording across follow-up hints. " +
+        "Do not include <think> tags or hidden reasoning; return only the final answer.";
 
     private readonly List<OpenAIMessage> messageHistory = new List<OpenAIMessage>();
 
@@ -833,6 +845,53 @@ public class AIManager : MonoBehaviour
 
         AppendToChatUI(AIChatCanvasLayout.ThinkingRichText);
 
+        if (useGatewayForDoctorChat)
+        {
+            if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+            {
+                Debug.LogWarning("[AIManager] useGatewayForDoctorChat=true ama gatewayEndpoint boş. Inspector'dan endpoint girilmelidir.");
+                // fall through to legacy path which itself will skip due to empty apiKey
+            }
+            else
+            {
+                string lastUserMessage = string.Empty;
+                for (int i = messageHistory.Count - 1; i >= 0; i--)
+                {
+                    if (messageHistory[i] != null && messageHistory[i].role == "user")
+                    {
+                        lastUserMessage = messageHistory[i].content;
+                        break;
+                    }
+                }
+
+                string gatewayAnswer = null;
+                bool gatewayOk = false;
+                yield return SendDoctorChatViaGateway(lastUserMessage, messageHistory, (answer, ok) =>
+                {
+                    gatewayAnswer = answer;
+                    gatewayOk = ok;
+                });
+
+                if (gatewayOk && !string.IsNullOrWhiteSpace(gatewayAnswer))
+                {
+                    AppendToChatUI("<color=#1D9AF2><b>Doktor:</b> " + gatewayAnswer + "</color>");
+                    messageHistory.Add(new OpenAIMessage { role = "assistant", content = gatewayAnswer });
+                    Speak(gatewayAnswer);
+                }
+                else
+                {
+                    string fallbackText = string.IsNullOrWhiteSpace(gatewayAnswer) ? GatewayFallbackUserMessage : gatewayAnswer;
+                    AppendToChatUI("<color=red>" + fallbackText + "</color>");
+                }
+
+                if (sendButton != null)
+                {
+                    sendButton.interactable = true;
+                }
+                yield break;
+            }
+        }
+
         string preferredModel = ResolveDoctorChatModel();
         string lastErrorBody = string.Empty;
         string lastErrorText = string.Empty;
@@ -848,15 +907,11 @@ public class AIManager : MonoBehaviour
             bool useFallbackModel = allowM27Fallback && attempt > 0;
             string modelForAttempt = useFallbackModel ? minimaxFallbackModel : preferredModel;
 
-            OpenAIRequest req = new OpenAIRequest
-            {
-                model = modelForAttempt,
-                messages = BuildMessagesForRequest(),
-                temperature = DefaultDoctorChatTemperature,
-                max_tokens = DefaultChatMaxTokens
-            };
-
-            string jsonPayload = JsonUtility.ToJson(req);
+            string jsonPayload = BuildChatCompletionPayload(
+                modelForAttempt,
+                BuildMessagesForRequest(),
+                DefaultDoctorChatTemperature,
+                DefaultChatMaxTokens);
 
             using (UnityWebRequest request = new UnityWebRequest(apiURL, "POST"))
             {
@@ -881,13 +936,12 @@ public class AIManager : MonoBehaviour
                         string jsonResponse = request.downloadHandler.text;
                         OpenAIResponse res = JsonUtility.FromJson<OpenAIResponse>(jsonResponse);
 
-                        if (res != null && res.choices != null && res.choices.Count > 0 && res.choices[0].message != null)
+                        if (res != null && res.choices != null && res.choices.Count > 0)
                         {
-                            string aiMessage = res.choices[0].message.content;
-                            string visibleMessage = ExtractVisibleAssistantMessage(aiMessage);
-                            if (string.IsNullOrWhiteSpace(visibleMessage))
+                            string visibleMessage = ExtractVisibleAssistantMessage(ExtractAssistantMessageFromResponse(res, jsonResponse));
+                            if (string.IsNullOrWhiteSpace(visibleMessage) && verboseConsoleLogs)
                             {
-                                visibleMessage = ExtractVisibleAssistantMessage(ExtractAssistantMessageFromRawJson(jsonResponse));
+                                Debug.LogWarning("[AIManager] API cevabinda gorunur icerik yok. Alan ozeti: " + BuildAssistantResponseFieldSummary(jsonResponse));
                             }
                             bool hasVisibleMessage = !string.IsNullOrWhiteSpace(visibleMessage);
                             if (string.IsNullOrWhiteSpace(visibleMessage))
@@ -978,6 +1032,48 @@ public class AIManager : MonoBehaviour
 
     private IEnumerator SendTriageHintRequestRoutine(List<OpenAIMessage> requestMessages, System.Action<string> onSuccess, System.Action<string> onError)
     {
+        if (useGatewayForDoctorChat)
+        {
+            if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+            {
+                Debug.LogWarning("[AIManager] useGatewayForDoctorChat=true ama gatewayEndpoint boş. Triage hint gateway yolu atlanıyor.");
+                // fall through to legacy path which itself will skip due to empty apiKey
+            }
+            else
+            {
+                string lastUserMessage = string.Empty;
+                if (requestMessages != null)
+                {
+                    for (int i = requestMessages.Count - 1; i >= 0; i--)
+                    {
+                        if (requestMessages[i] != null && requestMessages[i].role == "user")
+                        {
+                            lastUserMessage = requestMessages[i].content;
+                            break;
+                        }
+                    }
+                }
+
+                string gatewayAnswer = null;
+                bool gatewayOk = false;
+                yield return SendDoctorChatViaGateway(lastUserMessage, requestMessages, (answer, ok) =>
+                {
+                    gatewayAnswer = answer;
+                    gatewayOk = ok;
+                });
+
+                if (gatewayOk && !string.IsNullOrWhiteSpace(gatewayAnswer))
+                {
+                    onSuccess?.Invoke(gatewayAnswer);
+                }
+                else
+                {
+                    onError?.Invoke(GatewayFallbackUserMessage);
+                }
+                yield break;
+            }
+        }
+
         string preferredModel = ResolveApiModel();
         string lastErrorBody = string.Empty;
         string lastErrorText = string.Empty;
@@ -993,15 +1089,11 @@ public class AIManager : MonoBehaviour
             bool useFallbackModel = allowM27Fallback && attempt == totalAttemptCount - 1;
             string modelForAttempt = useFallbackModel ? minimaxFallbackModel : preferredModel;
 
-            OpenAIRequest req = new OpenAIRequest
-            {
-                model = modelForAttempt,
-                messages = requestMessages,
-                temperature = 0.38f,
-                max_tokens = TriageHintMaxTokens
-            };
-
-            string jsonPayload = JsonUtility.ToJson(req);
+            string jsonPayload = BuildChatCompletionPayload(
+                modelForAttempt,
+                requestMessages,
+                0.38f,
+                TriageHintMaxTokens);
 
             using (UnityWebRequest request = new UnityWebRequest(apiURL, "POST"))
             {
@@ -1026,13 +1118,12 @@ public class AIManager : MonoBehaviour
                         string jsonResponse = request.downloadHandler.text;
                         OpenAIResponse res = JsonUtility.FromJson<OpenAIResponse>(jsonResponse);
 
-                        if (res != null && res.choices != null && res.choices.Count > 0 && res.choices[0].message != null)
+                        if (res != null && res.choices != null && res.choices.Count > 0)
                         {
-                            string aiMessage = res.choices[0].message.content;
-                            string visibleMessage = ExtractVisibleAssistantMessage(aiMessage);
-                            if (string.IsNullOrWhiteSpace(visibleMessage))
+                            string visibleMessage = ExtractVisibleAssistantMessage(ExtractAssistantMessageFromResponse(res, jsonResponse));
+                            if (string.IsNullOrWhiteSpace(visibleMessage) && verboseConsoleLogs)
                             {
-                                visibleMessage = ExtractVisibleAssistantMessage(ExtractAssistantMessageFromRawJson(jsonResponse));
+                                Debug.LogWarning("[AIManager] Triage hint cevabinda gorunur icerik yok. Alan ozeti: " + BuildAssistantResponseFieldSummary(jsonResponse));
                             }
                             if (string.IsNullOrWhiteSpace(visibleMessage))
                             {
@@ -1323,8 +1414,7 @@ public class AIManager : MonoBehaviour
             return;
         }
 
-        bool shouldUseElevenLabs = ShouldUseElevenLabsTts();
-        if (ttsUnsupportedForSession && !shouldUseElevenLabs)
+        if (ttsUnsupportedForSession)
         {
             return;
         }
@@ -1347,14 +1437,13 @@ public class AIManager : MonoBehaviour
         }
 
         StopDoctorSpeech();
-        if (shouldUseElevenLabs)
+        if (!ShouldUseElevenLabsTts())
         {
-            activeSpeechRequest = StartCoroutine(PostElevenLabsSpeechRequest(speakableText));
+            DisableTtsForSession("Doktor seslendirme gateway endpoint'i tanimli degil.");
+            return;
         }
-        else
-        {
-            activeSpeechRequest = StartCoroutine(PostSpeechRequest(speakableText));
-        }
+
+        activeSpeechRequest = StartCoroutine(PostElevenLabsSpeechRequest(speakableText));
     }
 
     private IEnumerator PostElevenLabsSpeechRequest(string text)
@@ -1366,31 +1455,24 @@ public class AIManager : MonoBehaviour
             yield break;
         }
 
-        string resolvedApiKey = ResolveElevenLabsApiKey();
-        if (string.IsNullOrWhiteSpace(resolvedApiKey))
+        string requestUrl = ResolveTtsGatewayEndpoint();
+        if (string.IsNullOrWhiteSpace(requestUrl))
         {
+            DisableTtsForSession("Doktor seslendirme gateway endpoint'i tanimli degil.");
             activeSpeechRequest = null;
             yield break;
         }
 
-        string resolvedVoiceId = SanitizeElevenLabsValue(elevenLabsVoiceId, "pNInz6obpgDQGcFmaJgB");
-        string requestUrl = BuildElevenLabsRequestUrl(resolvedVoiceId);
-
-        ElevenLabsTtsRequest requestPayload = new ElevenLabsTtsRequest
+        GatewayTtsRequest requestPayload = new GatewayTtsRequest
         {
             text = text,
-            model_id = "eleven_multilingual_v2",
-            voice_settings = new ElevenLabsVoiceSettings
-            {
-                stability = 0.5f,
-                similarity_boost = 0.75f,
-                style = 0f,
-                use_speaker_boost = true
-            }
+            participantKey = ResolveParticipantKeyForGateway(),
+            sessionId = ResolveSessionIdForGateway(),
+            moduleId = "module_3"
         };
 
         string jsonPayload = JsonUtility.ToJson(requestPayload);
-        LogVerbose("[AIManager] ElevenLabs TTS payload: " + jsonPayload);
+        LogVerbose("[AIManager.TTSGateway] payloadLen=" + jsonPayload.Length);
 
         using (UnityWebRequest request = new UnityWebRequest(requestUrl, "POST"))
         {
@@ -1401,31 +1483,20 @@ public class AIManager : MonoBehaviour
 
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Accept", "audio/mpeg");
-            request.SetRequestHeader("xi-api-key", resolvedApiKey);
 
             yield return request.SendWebRequest();
 
             bool requestFailed = request.result == UnityWebRequest.Result.ConnectionError ||
                                  request.result == UnityWebRequest.Result.ProtocolError;
-            if (requestFailed)
+            string contentType = request.GetResponseHeader("Content-Type") ?? string.Empty;
+            bool audioResponse = contentType.IndexOf("audio/", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 contentType.IndexOf("mpeg", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (requestFailed || !audioResponse)
             {
                 string responseText = request.downloadHandler != null ? request.downloadHandler.text : string.Empty;
-                if (request.responseCode == 401 || request.responseCode == 429)
-                {
-                    Debug.LogWarning("[AIManager] ElevenLabs TTS kullanilamadi. HTTP " + request.responseCode + " | " + request.error + " | Detay: " + responseText);
-                    activeSpeechRequest = null;
-                    yield break;
-                }
-
-                if (!string.IsNullOrWhiteSpace(request.error) &&
-                    request.error.IndexOf("Cannot resolve destination host", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    Debug.LogError("[AIManager] ElevenLabs host cozumlenemedi. URL: " + requestUrl + " | Inspector elevenLabsTtsUrl degerini kontrol et. HTTP " + request.responseCode + " | " + request.error + " | Detay: " + responseText);
-                }
-                else
-                {
-                    Debug.LogError("[AIManager] ElevenLabs TTS hatasi. URL: " + requestUrl + " | HTTP " + request.responseCode + " | " + request.error + " | Detay: " + responseText);
-                }
+                Debug.LogWarning("[AIManager.TTSGateway] HTTP fail status=" + request.responseCode
+                    + " contentType=" + contentType
+                    + " bodyLen=" + (string.IsNullOrEmpty(responseText) ? 0 : responseText.Length));
                 activeSpeechRequest = null;
                 yield break;
             }
@@ -1433,12 +1504,12 @@ public class AIManager : MonoBehaviour
             byte[] audioBytes = request.downloadHandler != null ? request.downloadHandler.data : null;
             if (audioBytes == null || audioBytes.Length == 0)
             {
-                Debug.LogWarning("[AIManager] ElevenLabs TTS ses verisi bos dondu.");
+                Debug.LogWarning("[AIManager.TTSGateway] ses verisi bos dondu.");
                 activeSpeechRequest = null;
                 yield break;
             }
 
-            string tempFileName = "tts_elevenlabs_" + System.Guid.NewGuid().ToString("N") + ".mp3";
+            string tempFileName = "tts_gateway_" + System.Guid.NewGuid().ToString("N") + ".mp3";
             string tempPath = System.IO.Path.Combine(Application.temporaryCachePath, tempFileName);
             try
             {
@@ -1446,7 +1517,7 @@ public class AIManager : MonoBehaviour
             }
             catch (System.Exception e)
             {
-                Debug.LogError("[AIManager] ElevenLabs MP3 gecici dosyaya yazilamadi: " + e.Message);
+                Debug.LogError("[AIManager.TTSGateway] MP3 gecici dosyaya yazilamadi: " + e.Message);
                 activeSpeechRequest = null;
                 yield break;
             }
@@ -1455,7 +1526,7 @@ public class AIManager : MonoBehaviour
             using (UnityWebRequest audioRequest = UnityWebRequestMultimedia.GetAudioClip(fileUrl, AudioType.MPEG))
             {
                 yield return audioRequest.SendWebRequest();
-                LogVerbose("[AIManager] ElevenLabs AudioClip yukleme sonucu: " + audioRequest.result
+                LogVerbose("[AIManager.TTSGateway] AudioClip yukleme sonucu: " + audioRequest.result
                     + " | Hata: " + audioRequest.error
                     + " | Bytes: " + (audioBytes != null ? audioBytes.Length.ToString() : "null"));
 
@@ -1463,7 +1534,7 @@ public class AIManager : MonoBehaviour
                                           audioRequest.result == UnityWebRequest.Result.ProtocolError;
                 if (audioRequestFailed)
                 {
-                    Debug.LogError("[AIManager] ElevenLabs MP3 AudioClip'e donusturulemedi. " + audioRequest.error);
+                    Debug.LogError("[AIManager.TTSGateway] MP3 AudioClip'e donusturulemedi. " + audioRequest.error);
                     TryDeleteTemporaryAudioFile(tempPath);
                     activeSpeechRequest = null;
                     yield break;
@@ -1473,7 +1544,7 @@ public class AIManager : MonoBehaviour
                 TryDeleteTemporaryAudioFile(tempPath);
                 if (clip == null)
                 {
-                    Debug.LogWarning("[AIManager] ElevenLabs AudioClip olusturulamadi.");
+                    Debug.LogWarning("[AIManager.TTSGateway] AudioClip olusturulamadi.");
                     activeSpeechRequest = null;
                     yield break;
                 }
@@ -1485,8 +1556,8 @@ public class AIManager : MonoBehaviour
                     yield break;
                 }
 
-                resolvedTtsModel = "elevenlabs";
-                resolvedDoctorVoiceId = resolvedVoiceId;
+                resolvedTtsModel = "elevenlabs_gateway";
+                resolvedDoctorVoiceId = "remote_config";
                 ttsUnsupportedForSession = false;
                 ttsDisableReason = string.Empty;
 
@@ -1496,13 +1567,21 @@ public class AIManager : MonoBehaviour
                 source.clip = clip;
                 source.volume = 1f;
                 source.Play();
-                LogVerbose("[AIManager] ElevenLabs doktor sesi caliyor. Voice: " + resolvedVoiceId);
+                LogVerbose("[AIManager.TTSGateway] doktor sesi caliyor. Bytes: " + audioBytes.Length);
                 activeSpeechRequest = null;
             }
         }
     }
 
     private IEnumerator PostSpeechRequest(string text)
+    {
+        DisableTtsForSession("MiniMax TTS runtime devre disi. Doktor sesi Vercel TTS gateway uzerinden calisir.");
+        activeSpeechRequest = null;
+        yield break;
+    }
+
+    [System.Obsolete("MiniMax TTS direct path is disabled. Use PostElevenLabsSpeechRequest through the Vercel TTS gateway.")]
+    private IEnumerator PostLegacyMiniMaxSpeechRequest(string text)
     {
         AudioSource source = ResolveDoctorAudioSource();
         if (source == null)
@@ -1999,12 +2078,12 @@ public class AIManager : MonoBehaviour
                 failedModels.Add(model);
             }
 
-            return "Bu MiniMax API anahtari doktor seslendirme modellerine erisemiyor. Reddedilen modeller: " + string.Join(", ", failedModels) + ". Inspector'da Tts Api Key Override alanina TTS destekli ayri bir anahtar gir.";
+        return "Doktor seslendirme gateway'i bu oturumda kullanilamadi. Reddedilen eski modeller: " + string.Join(", ", failedModels) + ".";
         }
 
         if (cachedDoctorVoiceCandidates.Count == 0)
         {
-            return "MiniMax tarafinda gecerli doktor sesi bulunamadi.";
+            return "Doktor seslendirme gateway'i gecerli bir ses dondurmedi.";
         }
 
         return "Doktor sesi bu oturumda kullanilamadi.";
@@ -2012,40 +2091,29 @@ public class AIManager : MonoBehaviour
 
     private bool ShouldUseElevenLabsTts()
     {
-        return useElevenLabsTts && !string.IsNullOrWhiteSpace(ResolveElevenLabsApiKey());
+        return useElevenLabsTts && !string.IsNullOrWhiteSpace(ResolveTtsGatewayEndpoint());
     }
 
-    private static string SanitizeElevenLabsValue(string value, string fallback)
+    private string ResolveTtsGatewayEndpoint()
     {
-        string resolved = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        resolved = resolved.Replace("\u200B", string.Empty)
-                           .Replace("\u200C", string.Empty)
-                           .Replace("\u200D", string.Empty)
-                           .Replace("\"", string.Empty)
-                           .Replace("'", string.Empty);
-        return string.IsNullOrWhiteSpace(resolved) ? fallback : resolved;
-    }
-
-    private string BuildElevenLabsRequestUrl(string resolvedVoiceId)
-    {
-        string defaultBaseUrl = "https://api.elevenlabs.io/v1/text-to-speech/";
-        string configuredBaseUrl = SanitizeElevenLabsValue(elevenLabsTtsUrl, defaultBaseUrl);
-        string candidateUrl = configuredBaseUrl.TrimEnd('/') + "/" + resolvedVoiceId;
-
-        if (System.Uri.TryCreate(candidateUrl, System.UriKind.Absolute, out System.Uri candidateUri) &&
-            (candidateUri.Scheme == System.Uri.UriSchemeHttps || candidateUri.Scheme == System.Uri.UriSchemeHttp))
+        string configured = string.IsNullOrWhiteSpace(ttsGatewayEndpoint) ? string.Empty : ttsGatewayEndpoint.Trim();
+        if (string.IsNullOrWhiteSpace(configured) && !string.IsNullOrWhiteSpace(gatewayEndpoint))
         {
-            return candidateUri.ToString();
+            configured = gatewayEndpoint.Trim().Replace("/api/modul3Chat", "/api/modul3Tts");
         }
 
-        string fallbackUrl = defaultBaseUrl.TrimEnd('/') + "/" + resolvedVoiceId;
-        Debug.LogWarning("[AIManager] elevenLabsTtsUrl gecersiz gorunuyor. Varsayilan endpoint kullaniliyor: " + fallbackUrl);
-        return fallbackUrl;
-    }
+        if (System.Uri.TryCreate(configured, System.UriKind.Absolute, out System.Uri endpointUri) &&
+            (endpointUri.Scheme == System.Uri.UriSchemeHttps || endpointUri.Scheme == System.Uri.UriSchemeHttp))
+        {
+            return endpointUri.ToString();
+        }
 
-    private string ResolveElevenLabsApiKey()
-    {
-        return SanitizeElevenLabsValue(elevenLabsApiKey, string.Empty);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            Debug.LogWarning("[AIManager.TTSGateway] TTS endpoint gecersiz: " + configured);
+        }
+
+        return string.Empty;
     }
 
     private string ResolveTtsApiKey()
@@ -3964,6 +4032,42 @@ public class AIManager : MonoBehaviour
         }
     }
 
+    private string BuildChatCompletionPayload(string model, List<OpenAIMessage> messages, float temperature, int maxTokens)
+    {
+        if (ShouldDisableDeepSeekThinking())
+        {
+            DeepSeekChatRequest deepSeekRequest = new DeepSeekChatRequest
+            {
+                model = model,
+                messages = messages,
+                temperature = temperature,
+                max_tokens = maxTokens,
+                thinking = new DeepSeekThinkingOptions
+                {
+                    type = "disabled"
+                }
+            };
+
+            return JsonUtility.ToJson(deepSeekRequest);
+        }
+
+        OpenAIRequest request = new OpenAIRequest
+        {
+            model = model,
+            messages = messages,
+            temperature = temperature,
+            max_tokens = maxTokens
+        };
+
+        return JsonUtility.ToJson(request);
+    }
+
+    private bool ShouldDisableDeepSeekThinking()
+    {
+        return !string.IsNullOrWhiteSpace(apiURL) &&
+               apiURL.IndexOf("deepseek.com", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     private string ResolveApiModel()
     {
         if (!string.IsNullOrWhiteSpace(apiURL) && apiURL.Contains("minimax.io"))
@@ -4203,11 +4307,108 @@ public class AIManager : MonoBehaviour
         return compact;
     }
 
+    private string ExtractAssistantMessageFromResponse(OpenAIResponse response, string jsonResponse)
+    {
+        if (response != null && response.choices != null)
+        {
+            for (int i = 0; i < response.choices.Count; i++)
+            {
+                OpenAIChoice choice = response.choices[i];
+                if (choice == null)
+                {
+                    continue;
+                }
+
+                string messageContent = ExtractFirstNonEmptyString(
+                    choice.message != null ? choice.message.content : null,
+                    choice.message != null ? choice.message.final : null,
+                    choice.message != null ? choice.message.answer : null,
+                    choice.message != null ? choice.message.output_text : null,
+                    choice.message != null ? choice.message.text : null,
+                    choice.text);
+
+                if (!string.IsNullOrWhiteSpace(messageContent))
+                {
+                    return messageContent;
+                }
+
+                string deltaContent = ExtractFirstNonEmptyString(
+                    choice.delta != null ? choice.delta.content : null,
+                    choice.delta != null ? choice.delta.final : null,
+                    choice.delta != null ? choice.delta.answer : null,
+                    choice.delta != null ? choice.delta.output_text : null,
+                    choice.delta != null ? choice.delta.text : null);
+
+                if (!string.IsNullOrWhiteSpace(deltaContent))
+                {
+                    return deltaContent;
+                }
+            }
+        }
+
+        string rawMessage = ExtractAssistantMessageFromRawJson(jsonResponse);
+        if (!string.IsNullOrWhiteSpace(rawMessage))
+        {
+            return rawMessage;
+        }
+
+        return string.Empty;
+    }
+
+    private static string ExtractFirstNonEmptyString(params string[] values)
+    {
+        if (values == null)
+        {
+            return string.Empty;
+        }
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(values[i]))
+            {
+                return values[i];
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string BuildAssistantResponseFieldSummary(string jsonResponse)
+    {
+        if (string.IsNullOrWhiteSpace(jsonResponse))
+        {
+            return "empty response";
+        }
+
+        return "content=" + DescribeExtractedJsonValue(ExtractJsonStringValue(jsonResponse, "content")) +
+               ", reasoning_content=" + DescribeExtractedJsonValue(ExtractJsonStringValue(jsonResponse, "reasoning_content")) +
+               ", final=" + DescribeExtractedJsonValue(ExtractJsonStringValue(jsonResponse, "final")) +
+               ", answer=" + DescribeExtractedJsonValue(ExtractJsonStringValue(jsonResponse, "answer")) +
+               ", finish_reason=" + DescribeExtractedJsonValue(ExtractJsonStringValue(jsonResponse, "finish_reason"));
+    }
+
+    private static string DescribeExtractedJsonValue(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "empty-or-missing" : value.Length + " chars";
+    }
+
     private string ExtractVisibleAssistantMessage(string rawMessage)
     {
         if (string.IsNullOrWhiteSpace(rawMessage))
         {
             return string.Empty;
+        }
+
+        string taggedFinal = ExtractTaggedAssistantMessage(rawMessage, "final");
+        if (!string.IsNullOrWhiteSpace(taggedFinal))
+        {
+            return NormalizeDoctorVisibleText(taggedFinal);
+        }
+
+        string taggedAnswer = ExtractTaggedAssistantMessage(rawMessage, "answer");
+        if (!string.IsNullOrWhiteSpace(taggedAnswer))
+        {
+            return NormalizeDoctorVisibleText(taggedAnswer);
         }
 
         StringBuilder visibleBuilder = new StringBuilder(rawMessage.Length);
@@ -4245,6 +4446,31 @@ public class AIManager : MonoBehaviour
         return NormalizeDoctorVisibleText(visibleMessage);
     }
 
+    private static string ExtractTaggedAssistantMessage(string rawMessage, string tagName)
+    {
+        if (string.IsNullOrWhiteSpace(rawMessage) || string.IsNullOrWhiteSpace(tagName))
+        {
+            return string.Empty;
+        }
+
+        string openTag = "<" + tagName + ">";
+        string closeTag = "</" + tagName + ">";
+        int startIndex = rawMessage.IndexOf(openTag, System.StringComparison.OrdinalIgnoreCase);
+        if (startIndex < 0)
+        {
+            return string.Empty;
+        }
+
+        int contentStart = startIndex + openTag.Length;
+        int endIndex = rawMessage.IndexOf(closeTag, contentStart, System.StringComparison.OrdinalIgnoreCase);
+        if (endIndex < 0)
+        {
+            return rawMessage.Substring(contentStart).Trim();
+        }
+
+        return rawMessage.Substring(contentStart, endIndex - contentStart).Trim();
+    }
+
     private string ExtractAssistantMessageFromRawJson(string jsonResponse)
     {
         if (string.IsNullOrWhiteSpace(jsonResponse))
@@ -4252,15 +4478,18 @@ public class AIManager : MonoBehaviour
             return string.Empty;
         }
 
-        string[] keys =
+        string[] finalKeys =
         {
-            "\"content\":\"",
-            "\"text\":\""
+            "content",
+            "final",
+            "answer",
+            "output_text",
+            "text"
         };
 
-        for (int i = 0; i < keys.Length; i++)
+        for (int i = 0; i < finalKeys.Length; i++)
         {
-            string extracted = ExtractJsonStringValue(jsonResponse, keys[i]);
+            string extracted = ExtractJsonStringValue(jsonResponse, finalKeys[i]);
             if (!string.IsNullOrWhiteSpace(extracted))
             {
                 return extracted;
@@ -4270,13 +4499,14 @@ public class AIManager : MonoBehaviour
         return string.Empty;
     }
 
-    private string ExtractJsonStringValue(string json, string keyToken)
+    private string ExtractJsonStringValue(string json, string fieldName)
     {
-        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(keyToken))
+        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(fieldName))
         {
             return string.Empty;
         }
 
+        string keyToken = "\"" + fieldName + "\"";
         int searchIndex = 0;
         while (searchIndex < json.Length)
         {
@@ -4286,7 +4516,37 @@ public class AIManager : MonoBehaviour
                 return string.Empty;
             }
 
-            int valueStart = tokenIndex + keyToken.Length;
+            int colonIndex = json.IndexOf(':', tokenIndex + keyToken.Length);
+            if (colonIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            int valueStart = colonIndex + 1;
+            while (valueStart < json.Length && char.IsWhiteSpace(json[valueStart]))
+            {
+                valueStart++;
+            }
+
+            if (valueStart >= json.Length)
+            {
+                return string.Empty;
+            }
+
+            if (json[valueStart] != '"')
+            {
+                if (valueStart + 4 <= json.Length &&
+                    string.Equals(json.Substring(valueStart, 4), "null", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    searchIndex = valueStart + 4;
+                    continue;
+                }
+
+                searchIndex = valueStart + 1;
+                continue;
+            }
+
+            valueStart++;
             StringBuilder builder = new StringBuilder();
             bool escaping = false;
             for (int i = valueStart; i < json.Length; i++)
@@ -4360,6 +4620,10 @@ public class AIManager : MonoBehaviour
             if (searchIndex == valueStart)
             {
                 searchIndex++;
+            }
+            else
+            {
+                return string.Empty;
             }
         }
 
@@ -5331,6 +5595,188 @@ public class AIManager : MonoBehaviour
         labelRect.anchoredPosition = Vector2.zero;
         labelRect.localScale = Vector3.one;
     }
+
+    // ----- AI Gateway integration ---------------------------------------
+    private const string GatewayFallbackUserMessage = "Doktor şu anda yanıt veremiyor. Lütfen tekrar deneyin.";
+
+    private string ResolveParticipantKeyForGateway()
+    {
+        try
+        {
+            System.Type t = System.Type.GetType("ParticipantManager");
+            if (t == null)
+            {
+                // Search loaded assemblies (ParticipantManager may live in a different namespace).
+                foreach (System.Reflection.Assembly asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    t = asm.GetType("ParticipantManager", false);
+                    if (t != null) break;
+                }
+            }
+            if (t != null)
+            {
+                System.Reflection.MethodInfo mi = t.GetMethod("GetParticipantKey",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (mi != null)
+                {
+                    object result = mi.Invoke(null, null);
+                    if (result is string s && !string.IsNullOrWhiteSpace(s))
+                    {
+                        return s.Trim();
+                    }
+                }
+            }
+        }
+        catch (System.Exception)
+        {
+            // Best-effort lookup: never throw from gateway client.
+        }
+        return "unknown_participant";
+    }
+
+    private string ResolveSessionIdForGateway()
+    {
+        try
+        {
+            AnalyticsService service = AnalyticsService.EnsureInitializedSingleton();
+            if (service != null && service.SessionTracker != null)
+            {
+                string sessionId = service.SessionTracker.SessionId;
+                if (!string.IsNullOrWhiteSpace(sessionId))
+                {
+                    return sessionId.Trim();
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[AIManager.Gateway] SessionId alinamadi: " + ex.Message);
+        }
+
+        return "unknown_session";
+    }
+
+    private GatewayChatMessage[] BuildGatewayConversation()
+    {
+        const int MaxConversation = 10;
+        if (messageHistory == null || messageHistory.Count == 0)
+        {
+            return new GatewayChatMessage[0];
+        }
+
+        int start = Mathf.Max(0, messageHistory.Count - MaxConversation);
+        int count = messageHistory.Count - start;
+        GatewayChatMessage[] arr = new GatewayChatMessage[count];
+        for (int i = 0; i < count; i++)
+        {
+            OpenAIMessage src = messageHistory[start + i];
+            arr[i] = new GatewayChatMessage
+            {
+                role = src != null ? src.role : string.Empty,
+                content = src != null ? src.content : string.Empty
+            };
+        }
+        return arr;
+    }
+
+    private IEnumerator SendDoctorChatViaGateway(string userMessage, List<OpenAIMessage> history, System.Action<string, bool> onComplete)
+    {
+        if (string.IsNullOrWhiteSpace(gatewayEndpoint))
+        {
+            Debug.LogWarning("[AIManager.Gateway] gatewayEndpoint boş; istek atlanıyor.");
+            onComplete?.Invoke(GatewayFallbackUserMessage, false);
+            yield break;
+        }
+
+        const int MaxConversation = 10;
+        GatewayChatMessage[] convo;
+        if (history != null && history.Count > 0)
+        {
+            int start = Mathf.Max(0, history.Count - MaxConversation);
+            int count = history.Count - start;
+            convo = new GatewayChatMessage[count];
+            for (int i = 0; i < count; i++)
+            {
+                OpenAIMessage src = history[start + i];
+                convo[i] = new GatewayChatMessage
+                {
+                    role = src != null ? src.role : string.Empty,
+                    content = src != null ? src.content : string.Empty
+                };
+            }
+        }
+        else
+        {
+            convo = BuildGatewayConversation();
+        }
+
+        GatewayChatRequest payload = new GatewayChatRequest
+        {
+            participantKey = ResolveParticipantKeyForGateway(),
+            sessionId = ResolveSessionIdForGateway(),
+            moduleId = "module_3",
+            message = userMessage ?? string.Empty,
+            conversation = convo
+        };
+
+        string json = JsonUtility.ToJson(payload);
+
+        using (UnityWebRequest request = new UnityWebRequest(gatewayEndpoint, "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = Mathf.Max(3, gatewayTimeoutSeconds);
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+
+            yield return request.SendWebRequest();
+
+            bool failed = request.result == UnityWebRequest.Result.ConnectionError ||
+                          request.result == UnityWebRequest.Result.ProtocolError;
+
+            long status = request.responseCode;
+            int bodyLen = request.downloadHandler != null && request.downloadHandler.text != null
+                ? request.downloadHandler.text.Length
+                : 0;
+
+            if (failed)
+            {
+                Debug.LogWarning("[AIManager.Gateway] HTTP fail status=" + status + " bodyLen=" + bodyLen);
+                onComplete?.Invoke(GatewayFallbackUserMessage, false);
+                yield break;
+            }
+
+            string responseText = request.downloadHandler != null ? request.downloadHandler.text : null;
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                Debug.LogWarning("[AIManager.Gateway] Boş cevap status=" + status);
+                onComplete?.Invoke(GatewayFallbackUserMessage, false);
+                yield break;
+            }
+
+            GatewayChatResponse parsed = null;
+            try
+            {
+                parsed = JsonUtility.FromJson<GatewayChatResponse>(responseText);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning("[AIManager.Gateway] JSON parse hatası: " + ex.Message + " bodyLen=" + bodyLen);
+                onComplete?.Invoke(GatewayFallbackUserMessage, false);
+                yield break;
+            }
+
+            if (parsed == null || !parsed.ok || string.IsNullOrWhiteSpace(parsed.answer))
+            {
+                Debug.LogWarning("[AIManager.Gateway] ok=false veya boş answer status=" + status + " bodyLen=" + bodyLen);
+                onComplete?.Invoke(GatewayFallbackUserMessage, false);
+                yield break;
+            }
+
+            onComplete?.Invoke(parsed.answer, true);
+        }
+    }
 }
 
 #region JSON DTO Siniflari
@@ -5351,6 +5797,22 @@ public class OpenAIRequest
 }
 
 [System.Serializable]
+public class DeepSeekChatRequest
+{
+    public string model;
+    public List<OpenAIMessage> messages;
+    public float temperature;
+    public int max_tokens;
+    public DeepSeekThinkingOptions thinking;
+}
+
+[System.Serializable]
+public class DeepSeekThinkingOptions
+{
+    public string type;
+}
+
+[System.Serializable]
 public class OpenAIResponse
 {
     public string id;
@@ -5361,7 +5823,22 @@ public class OpenAIResponse
 public class OpenAIChoice
 {
     public int index;
-    public OpenAIMessage message;
+    public OpenAIResponseMessage message;
+    public OpenAIResponseMessage delta;
+    public string text;
+    public string finish_reason;
+}
+
+[System.Serializable]
+public class OpenAIResponseMessage
+{
+    public string role;
+    public string content;
+    public string reasoning_content;
+    public string text;
+    public string final;
+    public string answer;
+    public string output_text;
 }
 
 [System.Serializable]
@@ -5465,5 +5942,42 @@ public class ElevenLabsVoiceSettings
     public float similarity_boost;
     public float style;
     public bool use_speaker_boost;
+}
+
+[System.Serializable]
+internal class GatewayChatRequest
+{
+    public string participantKey;
+    public string sessionId;
+    public string moduleId;
+    public string message;
+    public GatewayChatMessage[] conversation;
+}
+
+[System.Serializable]
+internal class GatewayTtsRequest
+{
+    public string text;
+    public string participantKey;
+    public string sessionId;
+    public string moduleId;
+}
+
+[System.Serializable]
+internal class GatewayChatMessage
+{
+    public string role;
+    public string content;
+}
+
+[System.Serializable]
+internal class GatewayChatResponse
+{
+    public bool ok;
+    public string provider;
+    public string model;
+    public string answer;
+    public string source;
+    public string error;
 }
 #endregion

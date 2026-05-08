@@ -8,12 +8,26 @@ export interface Modul3AiConfig {
   temperature: number;
   max_tokens: number;
   system_prompt?: string;
+  tts_enabled: boolean;
+  tts_provider: string;
+  tts_voice_id: string;
+  tts_model: string;
+  tts_stability: number;
+  tts_similarity_boost: number;
+  tts_style: number;
+  tts_use_speaker_boost: boolean;
 }
 
 const DEFAULTS = {
   fallback_order: [] as string[],
   temperature: 0.4,
   max_tokens: 500,
+  tts_provider: 'elevenlabs',
+  tts_voice_id: 'pNInz6obpgDQGcFmaJgB',
+  tts_model: 'eleven_multilingual_v2',
+  tts_stability: 0.5,
+  tts_similarity_boost: 0.75,
+  tts_style: 0,
 };
 
 const TTL_MS = 60_000;
@@ -79,6 +93,16 @@ export async function getModul3AiConfig(force = false): Promise<Modul3AiConfig> 
     temperature: typeof raw.temperature === 'number' ? raw.temperature : DEFAULTS.temperature,
     max_tokens: typeof raw.max_tokens === 'number' ? raw.max_tokens : DEFAULTS.max_tokens,
     system_prompt: raw.system_prompt,
+    tts_enabled: raw.tts_enabled !== false,
+    tts_provider: raw.tts_provider || DEFAULTS.tts_provider,
+    tts_voice_id: raw.tts_voice_id || DEFAULTS.tts_voice_id,
+    tts_model: raw.tts_model || DEFAULTS.tts_model,
+    tts_stability: typeof raw.tts_stability === 'number' ? raw.tts_stability : DEFAULTS.tts_stability,
+    tts_similarity_boost: typeof raw.tts_similarity_boost === 'number'
+      ? raw.tts_similarity_boost
+      : DEFAULTS.tts_similarity_boost,
+    tts_style: typeof raw.tts_style === 'number' ? raw.tts_style : DEFAULTS.tts_style,
+    tts_use_speaker_boost: raw.tts_use_speaker_boost !== false,
   };
 
   cached = { value, ts: now };
