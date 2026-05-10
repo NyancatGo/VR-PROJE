@@ -4,11 +4,22 @@ Unity 2022.3.62f3 ile gelistirilen VR deprem kurtarma egitimi projesi. Proje Que
 
 ## Hazir APK
 
-Son dogrulanan Android/Quest test APK buradan indirilebilir:
+Ilk denenmesi gereken final Android/Quest APK:
+
+[VR_AFET_FINAL.apk](https://github.com/NyancatGo/VR-PROJE/raw/main/Releases/VR_AFET_FINAL.apk)
+
+Final APK dogrulama bilgisi:
+
+- SHA256: `297DBB6F077FCF76BF311DF03BF9E7CC6B5F2AF8858D980F85A257AFB7BE1C67`
+- Boyut: `533,196,985` byte
+- Build tipi: Non-development Android build
+- Hedef: Meta Quest / Android OpenXR
+
+Yedek development test APK:
 
 [VR_AFET_FINAL_TEST.apk](https://github.com/NyancatGo/VR-PROJE/raw/main/Releases/VR_AFET_FINAL_TEST.apk)
 
-Dogrulama bilgisi:
+Test APK dogrulama bilgisi:
 
 - SHA256: `B5BF0BE6710943426421EC068396243BA998BBB5695055D5C18418728C88B793`
 - Boyut: `541,411,351` byte
@@ -80,4 +91,4 @@ npm test
 
 ## Teslim Notu
 
-Ara build APK'leri repoya commitlenmez; sadece `Releases/` altindaki dogrulanmis APK Git LFS ile saklanir. Teslim icin APK Unity'den tekrar uretilebilir. Son dogrulanan build akisi Android/Quest manifest tarafinda hardware acceleration, landscape orientation, optional eye tracking ve ARM64 native library kontrollerinden gecmistir.
+Ara build APK'leri repoya commitlenmez; sadece `Releases/` altindaki dogrulanmis APK'ler Git LFS ile saklanir. Teslim icin APK Unity'den tekrar uretilebilir. Son dogrulanan build akisi Android/Quest manifest tarafinda hardware acceleration, landscape orientation, optional eye tracking ve ARM64 native library kontrollerinden gecmistir.
