@@ -4,15 +4,15 @@ Unity 2022.3.62f3 ile gelistirilen VR deprem kurtarma egitimi projesi. Proje Que
 
 ## Hazir APK
 
-Son dogrulanan Android/Quest APK buradan indirilebilir:
+Son dogrulanan Android/Quest test APK buradan indirilebilir:
 
-[VR_AFET_YARIN_GOZLUGE_KUR.apk](https://github.com/NyancatGo/VR-PROJE/raw/main/Releases/VR_AFET_YARIN_GOZLUGE_KUR.apk)
+[VR_AFET_FINAL_TEST.apk](https://github.com/NyancatGo/VR-PROJE/raw/main/Releases/VR_AFET_FINAL_TEST.apk)
 
 Dogrulama bilgisi:
 
 - SHA256: `B5BF0BE6710943426421EC068396243BA998BBB5695055D5C18418728C88B793`
 - Boyut: `541,411,351` byte
-- Build tipi: Development build
+- Build tipi: Development build / final test adayi
 - Hedef: Meta Quest / Android OpenXR
 
 ## Gereksinimler
