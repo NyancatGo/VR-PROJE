@@ -2,6 +2,19 @@
 
 Unity 2022.3.62f3 ile gelistirilen VR deprem kurtarma egitimi projesi. Proje Quest/OpenXR hedefli Android APK uretir; Firebase analytics, CSV export/audit scriptleri ve Modul 3 AI gateway altyapisi kaynak kodla birlikte gelir.
 
+## Hazir APK
+
+Son dogrulanan Android/Quest APK buradan indirilebilir:
+
+[VR_AFET_YARIN_GOZLUGE_KUR.apk](https://github.com/NyancatGo/VR-PROJE/raw/main/Releases/VR_AFET_YARIN_GOZLUGE_KUR.apk)
+
+Dogrulama bilgisi:
+
+- SHA256: `B5BF0BE6710943426421EC068396243BA998BBB5695055D5C18418728C88B793`
+- Boyut: `541,411,351` byte
+- Build tipi: Development build
+- Hedef: Meta Quest / Android OpenXR
+
 ## Gereksinimler
 
 - Unity `2022.3.62f3`
@@ -67,4 +80,4 @@ npm test
 
 ## Teslim Notu
 
-APK dosyalari repoya commitlenmez (`*.apk` ignore edilir). Teslim icin APK Unity'den tekrar uretilir. Son dogrulanan lokal build akisi Android/Quest manifest tarafinda hardware acceleration, landscape orientation, optional eye tracking ve ARM64 native library kontrollerinden gecmistir.
+Ara build APK'leri repoya commitlenmez; sadece `Releases/` altindaki dogrulanmis APK Git LFS ile saklanir. Teslim icin APK Unity'den tekrar uretilebilir. Son dogrulanan build akisi Android/Quest manifest tarafinda hardware acceleration, landscape orientation, optional eye tracking ve ARM64 native library kontrollerinden gecmistir.

@@ -52,6 +52,10 @@ crashlytics-build.properties
 sysinfo.txt
 ~UnityDirMonSyncFile~*
 
+# Release APKs are intentionally stored with Git LFS
+!Releases/
+!Releases/*.apk
+
 # OS files
 .DS_Store*
 Thumbs.db
