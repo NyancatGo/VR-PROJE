@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // AI gateway runtime config (provider, model, fallback chain).
+    // Read access here lets the function (admin SDK is exempt anyway) and
+    // optionally an authenticated client inspect config. Writes happen via
+    // the Firebase Console / admin SDK only.
+    //
+    // NOTE: replace `if request.auth != null` with `if true` if you have not
+    // wired Firebase Anonymous Auth yet; see functions/README.md "Production
+    // hardening". Admin SDK calls (server-side) bypass these rules.
+    match /ai_config/{doc} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Existing analytics path — left untouched. If your existing rules file
+    // already covers `katilimcilar/{participantKey}/...`, merge that block
+    // into this file by hand instead of replacing it.
+  }
+}

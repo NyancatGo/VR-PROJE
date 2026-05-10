@@ -19,7 +19,7 @@ public class MainMenuManager : MonoBehaviour
     private int selectedModuleIndex = -1;
 
     [Header("Debug")]
-    [Tooltip("Tiklenirse kayıtlı kullanıcı olsa bile login ekranı zorla gösterilir.")]
+    [Tooltip("Oturumda login yapılmadıysa kayıtlı kullanıcı olsa bile login ekranını gösterir.")]
     [SerializeField] private bool forceShowLogin;
 
     [Header("UI Panels")]
@@ -73,12 +73,33 @@ public class MainMenuManager : MonoBehaviour
         HidePanel(contentHubPanel);
 
         loginController = loginPanel != null ? loginPanel.GetComponent<LoginPanelController>() : null;
+        // Sahne baked'inde LoginPanelController unutulmuş olabilir; runtime'da
+        // ekle ki devamButton.onClick listener'ı vs. her durumda bağlansın.
+        if (loginController == null && loginPanel != null)
+        {
+            loginController = loginPanel.gameObject.AddComponent<LoginPanelController>();
+            Debug.Log("[MainMenuManager] LoginPanelController runtime'da otomatik eklendi.");
+        }
         if (loginController != null)
         {
             loginController.OnLoginCompleted += OnLoginCompleted;
         }
 
-        if (ParticipantManager.HasParticipant && !forceShowLogin)
+        // Login'i atla şartı:
+        //   1) PlayerPrefs'te bir katılımcı var,
+        //   2) bu oyun oturumunda login formu en az bir kez doldurulmuş.
+        // "Force Show Login" yalnızca oturumda henüz login yapılmadıysa etkilidir.
+        // Böylece modüller arası dönüşte Inspector'da açık unutulan debug bayrağı
+        // login ekranını tekrar açamaz.
+        bool skipLogin = ParticipantManager.HasParticipant &&
+                         ParticipantManager.HasLoggedInThisSession;
+
+        if (skipLogin && forceShowLogin)
+        {
+            Debug.Log("[MainMenuManager] Force Show Login aktif, ancak bu oturumda login tamamlandığı için yok sayıldı.");
+        }
+
+        if (skipLogin)
         {
             // Daha önce kayıt yapılmış — login ekranını atla
             HidePanel(loginPanel);
@@ -89,13 +110,12 @@ public class MainMenuManager : MonoBehaviour
                 futuristicCanvasGroup.blocksRaycasts = true;
             }
             // Analytics bağlamını geri yükle
-            AnalyticsService service = AnalyticsService.Instance;
-            if (service != null)
-            {
-                service.SetParticipantContext(
-                    ParticipantManager.GetParticipantKey(),
-                    ParticipantManager.GetParticipantName());
-            }
+            AnalyticsService service = AnalyticsService.EnsureInitializedSingleton();
+            service.SetParticipantContext(
+                ParticipantManager.GetParticipantKey(),
+                ParticipantManager.GetParticipantName());
+            service.WriteParticipantProfile();
+            TrainingAnalyticsFacade.InitializeFullSessionReport();
         }
         else
         {
@@ -141,7 +161,7 @@ public class MainMenuManager : MonoBehaviour
 
     public void OpenReportsFolder()
     {
-        string path = System.IO.Path.Combine(Application.persistentDataPath, "Reports");
+        string path = AnalyticsReportExporter.ResolveReportDirectoryPath();
         if (!System.IO.Directory.Exists(path))
         {
             System.IO.Directory.CreateDirectory(path);
@@ -150,8 +170,12 @@ public class MainMenuManager : MonoBehaviour
         Debug.Log($"[Analytics] Raporlar Klasörü: {path}");
 
         // Windows için en güvenli klasör açma yöntemi (explorer.exe kullanır)
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         string winPath = path.Replace("/", "\\");
         System.Diagnostics.Process.Start("explorer.exe", winPath);
+#else
+        Debug.LogWarning("[Analytics] Rapor klasorunu otomatik acma bu platformda desteklenmiyor.");
+#endif
     }
 
     public void LaunchModule()
@@ -318,81 +342,131 @@ public class MainMenuManager : MonoBehaviour
         // ═══════════════════════════════════════════════════════════════
         // 2. LOGIN PANEL
         // ═══════════════════════════════════════════════════════════════
-        loginPanel = CreatePanel(root, "LoginPanel", new Color(0.04f, 0.06f, 0.10f, 0.97f));
+        loginPanel = CreatePanel(root, "LoginPanel", new Color(0.02f, 0.04f, 0.07f, 0.98f));
 
-        // ── CARD (960 × 500, upper-centre of canvas) ──────────────────
-        // Canvas = 1920×1080. Card top ≈ y=460, bottom ≈ y=-40.
-        // Keyboard host is 380px tall at the very bottom (y=-540 … y=-160).
-        // Gap between card bottom (-40) and keyboard top (-160) = 120px.  ✓
+        // ── BACKDROP GLOW (yumusak merkez parıltısı) ─────────────────
+        GameObject backdropGlow = new GameObject("BackdropGlow");
+        backdropGlow.transform.SetParent(loginPanel.transform, false);
+        Image glowImg = backdropGlow.AddComponent<Image>();
+        glowImg.color = new Color(0.04f, 0.55f, 0.85f, 0.06f);
+        glowImg.raycastTarget = false;
+        RectTransform glowRect = backdropGlow.GetComponent<RectTransform>();
+        glowRect.sizeDelta = new Vector2(1400f, 900f);
+        glowRect.anchoredPosition = new Vector2(0f, 180f);
+
+        // ── CARD (980 × 540, upper-centre of canvas) ──────────────────
         GameObject cardObj = new GameObject("LoginCard");
         cardObj.transform.SetParent(loginPanel.transform, false);
         Image cardImg = cardObj.AddComponent<Image>();
-        cardImg.color = new Color(0.07f, 0.10f, 0.15f, 1f);
+        cardImg.color = new Color(0.06f, 0.09f, 0.13f, 1f);
         Outline cardOutline = cardObj.AddComponent<Outline>();
-        cardOutline.effectColor = new Color(0.06f, 0.82f, 1f, 0.70f);
-        cardOutline.effectDistance = new Vector2(4f, -4f);
+        cardOutline.effectColor = new Color(0.06f, 0.82f, 1f, 0.55f);
+        cardOutline.effectDistance = new Vector2(2f, -2f);
         RectTransform cardRect = cardObj.GetComponent<RectTransform>();
-        cardRect.sizeDelta = new Vector2(960f, 500f);
-        cardRect.anchoredPosition = new Vector2(0f, 210f);
+        cardRect.sizeDelta = new Vector2(980f, 540f);
+        cardRect.anchoredPosition = new Vector2(0f, 220f);
 
-        // ── Header strip (top 85px of card) ─────────────────────────
+        // Yumusak golge: ikinci bir Outline daha guclu yayilim icin
+        Shadow cardShadow = cardObj.AddComponent<Shadow>();
+        cardShadow.effectColor = new Color(0f, 0f, 0f, 0.55f);
+        cardShadow.effectDistance = new Vector2(0f, -8f);
+
+        // ── Header strip (top 90px of card) ─────────────────────────
         GameObject hdrObj = new GameObject("CardHeader");
         hdrObj.transform.SetParent(cardObj.transform, false);
         Image hdrImg = hdrObj.AddComponent<Image>();
-        hdrImg.color = new Color(0.04f, 0.06f, 0.11f, 1f);
+        hdrImg.color = new Color(0.03f, 0.05f, 0.09f, 1f);
         RectTransform hdrRect = hdrObj.GetComponent<RectTransform>();
         hdrRect.anchorMin = new Vector2(0f, 1f); hdrRect.anchorMax = new Vector2(1f, 1f);
         hdrRect.pivot     = new Vector2(0.5f, 1f);
         hdrRect.offsetMin = Vector2.zero; hdrRect.offsetMax = Vector2.zero;
-        hdrRect.sizeDelta = new Vector2(0f, 85f);
+        hdrRect.sizeDelta = new Vector2(0f, 90f);
 
-        // Cyan top-border inside header
+        // Cyan top-border inside header (kalın parlama)
         GameObject topBar = new GameObject("TopBar");
         topBar.transform.SetParent(hdrObj.transform, false);
-        topBar.AddComponent<Image>().color = new Color(0.06f, 0.82f, 1f, 1f);
+        topBar.AddComponent<Image>().color = new Color(0.10f, 0.95f, 1f, 1f);
         RectTransform tbRect = topBar.GetComponent<RectTransform>();
         tbRect.anchorMin = new Vector2(0f, 1f); tbRect.anchorMax = new Vector2(1f, 1f);
         tbRect.pivot = new Vector2(0.5f, 1f);
         tbRect.offsetMin = Vector2.zero; tbRect.offsetMax = Vector2.zero;
-        tbRect.sizeDelta = new Vector2(0f, 5f);
+        tbRect.sizeDelta = new Vector2(0f, 4f);
+
+        // Header'da kucuk numara rozeti ("1")
+        GameObject badgeObj = new GameObject("StepBadge");
+        badgeObj.transform.SetParent(hdrObj.transform, false);
+        Image badgeImg = badgeObj.AddComponent<Image>();
+        badgeImg.color = new Color(0.06f, 0.82f, 1f, 0.18f);
+        Outline badgeOutline = badgeObj.AddComponent<Outline>();
+        badgeOutline.effectColor = new Color(0.10f, 0.95f, 1f, 0.85f);
+        badgeOutline.effectDistance = new Vector2(1f, -1f);
+        RectTransform badgeRect = badgeObj.GetComponent<RectTransform>();
+        badgeRect.anchorMin = new Vector2(0f, 0.5f); badgeRect.anchorMax = new Vector2(0f, 0.5f);
+        badgeRect.pivot = new Vector2(0f, 0.5f);
+        badgeRect.sizeDelta = new Vector2(46f, 46f);
+        badgeRect.anchoredPosition = new Vector2(28f, -3f);
+        var badgeText = CreateText(badgeObj.transform, "Num", "1", 26, Vector2.zero);
+        badgeText.color = new Color(0.10f, 0.95f, 1f, 1f);
+        badgeText.fontStyle = FontStyles.Bold;
+        badgeText.rectTransform.sizeDelta = new Vector2(46f, 46f);
 
         // Title text centred in header
-        var hdrTitle = CreateText(hdrObj.transform, "Title", "KATILIMCI KAYIT", 38, new Vector2(0f, -40f));
-        hdrTitle.color = new Color(0.06f, 0.88f, 1f, 1f);
+        var hdrTitle = CreateText(hdrObj.transform, "Title", "KATILIMCI KAYIT", 36, new Vector2(0f, -45f));
+        hdrTitle.color = new Color(0.92f, 0.97f, 1f, 1f);
+        hdrTitle.fontStyle = FontStyles.Bold;
+        hdrTitle.characterSpacing = 8f;
 
-        // Subtle header-bottom line
+        // Header alt cizgisi (cyan)
         GameObject hdrLine = new GameObject("HeaderLine");
         hdrLine.transform.SetParent(cardObj.transform, false);
-        hdrLine.AddComponent<Image>().color = new Color(0.06f, 0.82f, 1f, 0.22f);
+        hdrLine.AddComponent<Image>().color = new Color(0.06f, 0.82f, 1f, 0.35f);
         RectTransform hlRect = hdrLine.GetComponent<RectTransform>();
         hlRect.anchorMin = new Vector2(0f, 1f); hlRect.anchorMax = new Vector2(1f, 1f);
         hlRect.pivot = new Vector2(0.5f, 1f);
-        hlRect.anchoredPosition = new Vector2(0f, -85f);
+        hlRect.anchoredPosition = new Vector2(0f, -90f);
         hlRect.offsetMin = Vector2.zero; hlRect.offsetMax = Vector2.zero;
         hlRect.sizeDelta = new Vector2(0f, 1f);
 
-        // Subtitle
+        // Subtitle (kart icinde, header altinda)
         var subTxt = CreateText(cardObj.transform, "Subtitle",
-            "Lütfen adınızı ve soyadınızı giriniz.", 20, new Vector2(0f, 115f));
-        subTxt.color = new Color(0.50f, 0.65f, 0.78f, 1f);
+            "Eğitime başlamadan önce lütfen ad ve soyadınızı giriniz.", 18, new Vector2(0f, 130f));
+        subTxt.color = new Color(0.55f, 0.68f, 0.80f, 1f);
 
-        // Input fields (840 px wide inside 960 px card → 60 px margin each side)
-        TMP_InputField adInput    = BuildLoginInputField(cardObj.transform, "Ad_InputField",    "Ad",    new Vector2(0f,  38f));
-        TMP_InputField soyadInput = BuildLoginInputField(cardObj.transform, "Soyad_InputField", "Soyad", new Vector2(0f, -58f));
-        adInput   .GetComponent<RectTransform>().sizeDelta = new Vector2(840f, 68f);
-        soyadInput.GetComponent<RectTransform>().sizeDelta = new Vector2(840f, 68f);
+        // Input fields (860 px wide inside 980 px card → 60 px margin each side)
+        TMP_InputField adInput    = BuildLoginInputField(cardObj.transform, "Ad_InputField",    "Ad",    new Vector2(0f,  42f));
+        TMP_InputField soyadInput = BuildLoginInputField(cardObj.transform, "Soyad_InputField", "Soyad", new Vector2(0f, -56f));
+        adInput   .GetComponent<RectTransform>().sizeDelta = new Vector2(860f, 72f);
+        soyadInput.GetComponent<RectTransform>().sizeDelta = new Vector2(860f, 72f);
 
-        // DEVAM ET button
+        // DEVAM ET button (daha belirgin, gradient hissi veren outline)
         Button devamBtn = CreateButton(cardObj.transform, "DevamButton", "DEVAM ET",
-            new Vector2(0f, -172f), new Vector2(380f, 72f));
-        devamBtn.image.color = new Color(0.04f, 0.68f, 0.18f, 1f);
+            new Vector2(-110f, -185f), new Vector2(540f, 76f));
+        devamBtn.image.color = new Color(0.06f, 0.72f, 0.40f, 1f);
+        Outline devamOutline = devamBtn.gameObject.AddComponent<Outline>();
+        devamOutline.effectColor = new Color(0.20f, 1f, 0.65f, 0.55f);
+        devamOutline.effectDistance = new Vector2(2f, -2f);
         var devamLabel = devamBtn.GetComponentInChildren<TextMeshProUGUI>();
-        if (devamLabel != null) { devamLabel.fontSize = 26; devamLabel.fontStyle = FontStyles.Bold; }
+        if (devamLabel != null)
+        {
+            devamLabel.fontSize = 26;
+            devamLabel.fontStyle = FontStyles.Bold;
+            devamLabel.characterSpacing = 6f;
+            devamLabel.color = Color.white;
+        }
 
-        // ── REPORT FOLDER BUTTON (on login screen) ──
+        // ── REPORT FOLDER BUTTON (on login screen) - kart altinda nokta ──
         Button openFolderBtnLogin = CreateButton(cardObj.transform, "OpenFolderButtonLogin", "KLASÖRÜ AÇ",
-            new Vector2(380f, -172f), new Vector2(180f, 72f));
-        openFolderBtnLogin.image.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            new Vector2(280f, -185f), new Vector2(200f, 76f));
+        openFolderBtnLogin.image.color = new Color(0.12f, 0.16f, 0.22f, 1f);
+        Outline folderOutline = openFolderBtnLogin.gameObject.AddComponent<Outline>();
+        folderOutline.effectColor = new Color(0.06f, 0.82f, 1f, 0.30f);
+        folderOutline.effectDistance = new Vector2(1f, -1f);
+        var folderLabel = openFolderBtnLogin.GetComponentInChildren<TextMeshProUGUI>();
+        if (folderLabel != null)
+        {
+            folderLabel.fontSize = 18;
+            folderLabel.color = new Color(0.70f, 0.85f, 0.95f, 1f);
+        }
         openFolderBtnLogin.onClick.AddListener(OpenReportsFolder);
 
         // ── KEYBOARD HOST (fixed 1200 × 380px, bottom-centre) ────────
@@ -563,61 +637,72 @@ public class MainMenuManager : MonoBehaviour
         GameObject fieldRoot = new GameObject(name);
         fieldRoot.transform.SetParent(parent, false);
         Image fieldBg = fieldRoot.AddComponent<Image>();
-        fieldBg.color = new Color(0.10f, 0.13f, 0.18f, 1f);
+        fieldBg.color = new Color(0.09f, 0.12f, 0.17f, 1f);
+        Outline fieldOutline = fieldRoot.AddComponent<Outline>();
+        fieldOutline.effectColor = new Color(0.06f, 0.82f, 1f, 0f); // focus'ta parlayacak
+        fieldOutline.effectDistance = new Vector2(1f, -1f);
         RectTransform fieldRect = fieldRoot.GetComponent<RectTransform>();
-        fieldRect.sizeDelta = new Vector2(840f, 68f);    // overridable after call
+        fieldRect.sizeDelta = new Vector2(860f, 72f);    // overridable after call
         fieldRect.anchoredPosition = pos;
 
-        // Left cyan accent bar (4 px)
+        // Left cyan accent bar (5 px)
         GameObject leftBar = new GameObject("LeftBar");
         leftBar.transform.SetParent(fieldRoot.transform, false);
-        leftBar.AddComponent<Image>().color = new Color(0.06f, 0.82f, 1f, 0.85f);
+        Image leftBarImg = leftBar.AddComponent<Image>();
+        leftBarImg.color = new Color(0.06f, 0.55f, 0.78f, 0.55f);
+        leftBarImg.raycastTarget = false;
         RectTransform lbRect = leftBar.GetComponent<RectTransform>();
         lbRect.anchorMin = new Vector2(0f, 0f); lbRect.anchorMax = new Vector2(0f, 1f);
         lbRect.pivot = new Vector2(0f, 0.5f);
         lbRect.offsetMin = Vector2.zero; lbRect.offsetMax = Vector2.zero;
-        lbRect.sizeDelta = new Vector2(4f, 0f);
+        lbRect.sizeDelta = new Vector2(5f, 0f);
 
-        // Bottom border line (1 px, full width)
+        // Bottom border line (2 px, full width)
         GameObject bottomLine = new GameObject("BottomLine");
         bottomLine.transform.SetParent(fieldRoot.transform, false);
-        bottomLine.AddComponent<Image>().color = new Color(0.06f, 0.82f, 1f, 0.35f);
+        Image bottomLineImg = bottomLine.AddComponent<Image>();
+        bottomLineImg.color = new Color(0.06f, 0.82f, 1f, 0.30f);
+        bottomLineImg.raycastTarget = false;
         RectTransform blRect = bottomLine.GetComponent<RectTransform>();
         blRect.anchorMin = new Vector2(0f, 0f); blRect.anchorMax = new Vector2(1f, 0f);
         blRect.pivot = new Vector2(0.5f, 0f);
         blRect.offsetMin = Vector2.zero; blRect.offsetMax = Vector2.zero;
-        blRect.sizeDelta = new Vector2(0f, 1f);
+        blRect.sizeDelta = new Vector2(0f, 2f);
 
         // Label above field
         GameObject labelObj = new GameObject("Label");
         labelObj.transform.SetParent(fieldRoot.transform, false);
         TextMeshProUGUI label = labelObj.AddComponent<TextMeshProUGUI>();
         label.text = placeholder.ToUpperInvariant();
-        label.fontSize = 13;
-        label.color = new Color(0.06f, 0.82f, 1f, 0.75f);
+        label.fontSize = 14;
+        label.color = new Color(0.06f, 0.82f, 1f, 0.55f);
         label.alignment = TextAlignmentOptions.MidlineLeft;
+        label.characterSpacing = 6f;
+        label.fontStyle = FontStyles.Bold;
+        label.raycastTarget = false;
         RectTransform lblRect = labelObj.GetComponent<RectTransform>();
         lblRect.anchorMin = new Vector2(0f, 1f); lblRect.anchorMax = new Vector2(1f, 1f);
         lblRect.pivot = new Vector2(0f, 0f);
-        lblRect.anchoredPosition = new Vector2(14f, 2f);
-        lblRect.sizeDelta = new Vector2(-14f, 20f);
+        lblRect.anchoredPosition = new Vector2(16f, 4f);
+        lblRect.sizeDelta = new Vector2(-16f, 22f);
 
         // Text area (with left margin to clear the accent bar)
         GameObject textArea = new GameObject("Text Area");
         textArea.transform.SetParent(fieldRoot.transform, false);
         RectTransform textAreaRect = textArea.AddComponent<RectTransform>();
         textAreaRect.anchorMin = Vector2.zero; textAreaRect.anchorMax = Vector2.one;
-        textAreaRect.offsetMin = new Vector2(16f, 3f); textAreaRect.offsetMax = new Vector2(-10f, -3f);
+        textAreaRect.offsetMin = new Vector2(20f, 4f); textAreaRect.offsetMax = new Vector2(-12f, -4f);
 
         // Placeholder
         GameObject phObj = new GameObject("Placeholder");
         phObj.transform.SetParent(textArea.transform, false);
         TextMeshProUGUI ph = phObj.AddComponent<TextMeshProUGUI>();
-        ph.text = placeholder;
+        ph.text = placeholder + " giriniz...";
         ph.fontSize = 26;
-        ph.color = new Color(0.38f, 0.47f, 0.58f, 1f);
+        ph.color = new Color(0.38f, 0.47f, 0.58f, 0.8f);
         ph.alignment = TextAlignmentOptions.MidlineLeft;
         ph.fontStyle = FontStyles.Italic;
+        ph.raycastTarget = false;
         RectTransform phRect = phObj.GetComponent<RectTransform>();
         phRect.anchorMin = Vector2.zero; phRect.anchorMax = Vector2.one;
         phRect.offsetMin = Vector2.zero; phRect.offsetMax = Vector2.zero;
@@ -627,8 +712,9 @@ public class MainMenuManager : MonoBehaviour
         txtObj.transform.SetParent(textArea.transform, false);
         TextMeshProUGUI txt = txtObj.AddComponent<TextMeshProUGUI>();
         txt.fontSize = 26;
-        txt.color = Color.white;
+        txt.color = new Color(0.96f, 0.99f, 1f, 1f);
         txt.alignment = TextAlignmentOptions.MidlineLeft;
+        txt.raycastTarget = false;
         RectTransform txtRect = txtObj.GetComponent<RectTransform>();
         txtRect.anchorMin = Vector2.zero; txtRect.anchorMax = Vector2.one;
         txtRect.offsetMin = Vector2.zero; txtRect.offsetMax = Vector2.zero;
@@ -638,6 +724,13 @@ public class MainMenuManager : MonoBehaviour
         input.textComponent = txt;
         input.placeholder = ph;
         input.pointSize = 26;
+
+        // Focus visuals: alana tiklandiginda accent bar/alt cizgi/label parlar.
+        // Bu hem hangi alanin aktif oldugunu net gosterir, hem de Ad/Soyad gecisinde
+        // yasanan goz aldatmasi hissini ortadan kaldirir.
+        LoginInputFieldFocus focusVisuals = fieldRoot.AddComponent<LoginInputFieldFocus>();
+        focusVisuals.Configure(input, leftBarImg, bottomLineImg, label, fieldOutline);
+
         return input;
     }
 

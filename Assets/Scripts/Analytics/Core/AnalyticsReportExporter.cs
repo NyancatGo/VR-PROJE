@@ -12,162 +12,34 @@ namespace TrainingAnalytics
         private readonly bool emitLogs;
         private readonly string reportDirectory;
         private readonly object syncRoot = new object();
-        private readonly List<Dictionary<string, object>> analyticsEventRows = new List<Dictionary<string, object>>();
-        private readonly Dictionary<string, List<Dictionary<string, object>>> firestoreRowsByCollection =
-            new Dictionary<string, List<Dictionary<string, object>>>();
+        private readonly List<Dictionary<string, object>> pendingRows = new List<Dictionary<string, object>>();
 
         private string participantKeyContext = string.Empty;
         private string participantNameContext = string.Empty;
         private int localSequence;
 
-        // Semicolon is friendlier for Turkish Excel regional settings.
         private const string CsvSeparator = ";";
+        private const string CsvFileName = "veriler.csv";
+        private static readonly object ExportSyncRoot = new object();
 
-        private static readonly string[] EventPreferredColumns =
+        private static readonly string[] PreferredColumns =
         {
             "sira_no",
-            "kayit_utc",
-            "event_name",
-            "event_label",
-            "participant_key",
-            "participant_name",
-            AnalyticsParams.InstallationId,
-            AnalyticsParams.SessionId,
-            AnalyticsParams.BuildVersion,
-            AnalyticsParams.SceneName,
-            AnalyticsParams.RuntimePlatform,
-            AnalyticsParams.ModuleId,
-            AnalyticsParams.ModuleName,
-            AnalyticsParams.ScenarioId,
-            AnalyticsParams.ScenarioName,
-            AnalyticsParams.ContentId,
-            AnalyticsParams.ContentName,
-            AnalyticsParams.ContentType,
-            AnalyticsParams.TaskId,
-            AnalyticsParams.TaskName,
-            AnalyticsParams.TaskType,
-            AnalyticsParams.TaskStatus,
-            AnalyticsParams.TaskProgress,
-            AnalyticsParams.VictimId,
-            AnalyticsParams.VictimName,
-            AnalyticsParams.AssignedTriage,
-            AnalyticsParams.ActualTriage,
-            AnalyticsParams.IsCorrect,
-            AnalyticsParams.QuizId,
-            AnalyticsParams.QuizName,
-            AnalyticsParams.QuestionIndex,
-            AnalyticsParams.SelectedAnswerIndex,
-            AnalyticsParams.CorrectAnswerIndex,
-            AnalyticsParams.ScoreValue,
-            AnalyticsParams.ScorePercent,
-            AnalyticsParams.DurationSeconds,
-            "tum_parametreler"
-        };
-
-        private static readonly string[] FirestorePreferredColumns =
-        {
-            "sira_no",
-            "kayit_utc",
-            "collection",
-            "written_utc",
-            "last_seen_utc",
-            "installation_id",
-            "session_id",
-            "participant_key",
-            "participant_name",
-            "full_name",
-            "module_id",
-            "module_name",
-            "scenario_id",
-            "scenario_name",
-            "event_name",
-            "task_id",
-            "task_name",
-            "target_id",
-            "target_name",
-            "victim_id",
-            "victim_name",
-            "assigned_triage",
-            "actual_triage",
-            "quiz_id",
-            "quiz_name",
-            "panel_id",
-            "panel_name",
-            "ai_question_type",
-            "completed",
-            "success",
-            "is_correct",
-            "task_progress",
-            "completed_count",
-            "total_count",
-            "total_question_count",
-            "answered_count",
-            "correct_count",
-            "question_index",
-            "selected_answer_index",
-            "correct_answer_index",
-            "duration_seconds",
-            "session_duration_seconds",
-            "score_value",
-            "score_percent",
-            "score_percentage",
-            "total_events"
-        };
-
-        private static readonly string[] SummaryColumns =
-        {
-            "alan",
-            "deger"
-        };
-
-        private static readonly string[] UnifiedPreferredColumns =
-        {
-            "sira_no",
-            "kayit_utc",
+            "tarih",
+            "saat",
             "kaynak",
-            "kaynak_detay",
-            "event_name",
-            "event_label",
-            "participant_key",
-            "participant_name",
-            "full_name",
-            AnalyticsParams.InstallationId,
-            AnalyticsParams.SessionId,
-            AnalyticsParams.ModuleId,
-            AnalyticsParams.ModuleName,
-            AnalyticsParams.ScenarioId,
-            AnalyticsParams.ScenarioName,
-            AnalyticsParams.TaskId,
-            AnalyticsParams.TaskName,
-            AnalyticsParams.TaskStatus,
-            AnalyticsParams.VictimId,
-            AnalyticsParams.VictimName,
-            AnalyticsParams.AssignedTriage,
-            AnalyticsParams.ActualTriage,
-            AnalyticsParams.IsCorrect,
-            AnalyticsParams.QuizId,
-            AnalyticsParams.QuizName,
-            AnalyticsParams.QuestionIndex,
-            AnalyticsParams.SelectedAnswerIndex,
-            AnalyticsParams.CorrectAnswerIndex,
-            AnalyticsParams.ScoreValue,
-            AnalyticsParams.ScorePercent,
-            AnalyticsParams.DurationSeconds,
-            AnalyticsParams.SceneName,
-            AnalyticsParams.BuildVersion,
-            AnalyticsParams.RuntimePlatform,
-            "tum_parametreler"
-        };
-
-        private static readonly string[] FirestoreCollectionOrder =
-        {
-            "participants",
-            "training_session_summaries",
-            "training_module_progress",
-            "training_task_results",
-            "training_quiz_results",
-            "training_ai_interactions",
-            "training_triage_results"
+            "olay",
+            "aciklama",
+            "katilimci_adi",
+            "modul",
+            "senaryo",
+            "gorev",
+            "hasta",
+            "test",
+            "sonuc",
+            "skor",
+            "sure_sn",
+            "detay"
         };
 
         public AnalyticsReportExporter(bool emitLogs = false)
@@ -200,118 +72,140 @@ namespace TrainingAnalytics
                 return;
             }
 
-            Dictionary<string, object> row = CreateBaseLocalRow();
-            row["event_name"] = eventName.Trim();
-            row["event_label"] = FormatEventName(eventName);
-            row["tum_parametreler"] = BuildParameterSummary(parameters);
-            CopyParameters(parameters, row);
+            Dictionary<string, object> row = CreateBaseRow();
+            row["kaynak"] = "Oyun";
+            row["olay"] = eventName.Trim();
+            row["aciklama"] = FormatEventName(eventName);
+
+            ExtractReadableFields(parameters, row);
+            row["detay"] = BuildParameterSummary(parameters);
 
             lock (syncRoot)
             {
-                analyticsEventRows.Add(row);
+                pendingRows.Add(row);
             }
 
             if (emitLogs)
             {
-                Debug.Log($"[AnalyticsReportExporter] Firebase event yerel rapora alindi: {eventName}");
+                Debug.Log($"[AnalyticsReportExporter] Event: {eventName}");
             }
         }
 
         public void LogFirestoreDocument(string collectionName, IReadOnlyDictionary<string, object> document)
         {
             string resolvedCollection = string.IsNullOrWhiteSpace(collectionName)
-                ? "firestore_unknown"
+                ? "firestore"
                 : collectionName.Trim();
 
-            Dictionary<string, object> row = CreateBaseLocalRow();
-            row["collection"] = resolvedCollection;
-            CopyParameters(document, row);
+            Dictionary<string, object> row = CreateBaseRow();
+            row["kaynak"] = "Kayit";
+            row["olay"] = resolvedCollection;
+            row["aciklama"] = FormatCollectionName(resolvedCollection);
+
+            ExtractReadableFields(document, row);
+            row["detay"] = BuildParameterSummary(document);
 
             lock (syncRoot)
             {
-                if (!firestoreRowsByCollection.TryGetValue(resolvedCollection, out List<Dictionary<string, object>> rows))
-                {
-                    rows = new List<Dictionary<string, object>>();
-                    firestoreRowsByCollection.Add(resolvedCollection, rows);
-                }
-
-                rows.Add(row);
+                pendingRows.Add(row);
             }
 
             if (emitLogs)
             {
-                Debug.Log($"[AnalyticsReportExporter] Firestore dokumani yerel rapora alindi: {resolvedCollection}");
+                Debug.Log($"[AnalyticsReportExporter] Firestore: {resolvedCollection}");
             }
         }
 
         public void ExportNow()
         {
-            CreateSnapshots(
-                out List<Dictionary<string, object>> eventSnapshot,
-                out Dictionary<string, List<Dictionary<string, object>>> firestoreSnapshot);
-
-            int firestoreRowCount = CountRows(firestoreSnapshot);
-            if (eventSnapshot.Count == 0 && firestoreRowCount == 0)
+            List<Dictionary<string, object>> snapshot;
+            lock (syncRoot)
             {
-                Debug.LogWarning("[AnalyticsReportExporter] Disa aktarilacak Firebase verisi yok. Rapor dosyasi olusturulmadi.");
-                return;
+                if (pendingRows.Count == 0)
+                {
+                    Debug.LogWarning("[AnalyticsReportExporter] Disa aktarilacak veri yok.");
+                    return;
+                }
+
+                snapshot = new List<Dictionary<string, object>>(pendingRows);
+                pendingRows.Clear();
             }
 
             try
             {
-                string participantName = ResolveParticipantName("Genel");
-                string safeParticipantName = SanitizeFileNameSegment(participantName, "Genel");
-                string exportFolderName = $"{safeParticipantName}_Firebase_Rapor_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}";
-                string exportFolder = Path.Combine(reportDirectory, exportFolderName);
-                Directory.CreateDirectory(exportFolder);
+                string participantKey = ResolveParticipantKey("genel");
+                string safeKey = SanitizeFileName(participantKey, "genel");
+                string userFolder = Path.Combine(reportDirectory, safeKey);
 
-                List<Dictionary<string, object>> summaryRows = BuildSummaryRows(exportFolder, eventSnapshot, firestoreSnapshot);
-                WriteDynamicCsv(Path.Combine(exportFolder, "00_Rapor_Ozeti.csv"), summaryRows, SummaryColumns);
+                List<string> headers = BuildHeaders(PreferredColumns);
+                Encoding utf8Bom = new UTF8Encoding(true);
 
-                List<Dictionary<string, object>> unifiedRows = BuildUnifiedRows(eventSnapshot, firestoreSnapshot);
-                if (unifiedRows.Count > 0)
+                lock (ExportSyncRoot)
                 {
-                    WriteDynamicCsv(
-                        Path.Combine(exportFolder, "00_Tum_Veriler_Birlesik.csv"),
-                        unifiedRows,
-                        UnifiedPreferredColumns);
+                    if (!Directory.Exists(userFolder))
+                    {
+                        Directory.CreateDirectory(userFolder);
+                    }
+
+                    string filePath = Path.Combine(userFolder, CsvFileName);
+                    EnsureHeaderIsCompatible(filePath, headers);
+                    bool fileExists = File.Exists(filePath) && new FileInfo(filePath).Length > 0;
+
+                    using (StreamWriter writer = new StreamWriter(filePath, true, utf8Bom))
+                    {
+                        if (!fileExists)
+                        {
+                            writer.WriteLine(BuildCsvLine(headers));
+                        }
+
+                        for (int i = 0; i < snapshot.Count; i++)
+                        {
+                            List<string> cells = new List<string>(headers.Count);
+                            for (int j = 0; j < headers.Count; j++)
+                            {
+                                snapshot[i].TryGetValue(headers[j], out object value);
+                                cells.Add(ConvertCellToString(value));
+                            }
+
+                            writer.WriteLine(BuildCsvLine(cells));
+                        }
+                    }
                 }
 
-                if (eventSnapshot.Count > 0)
-                {
-                    WriteDynamicCsv(
-                        Path.Combine(exportFolder, "01_Firebase_Analytics_Olaylari.csv"),
-                        eventSnapshot,
-                        EventPreferredColumns);
-                }
-
-                if (firestoreRowCount > 0)
-                {
-                    List<Dictionary<string, object>> combinedRows = CombineFirestoreRows(firestoreSnapshot);
-                    WriteDynamicCsv(
-                        Path.Combine(exportFolder, "02_Firestore_Tum_Dokumanlar.csv"),
-                        combinedRows,
-                        FirestorePreferredColumns);
-
-                    WriteFirestoreCollectionFiles(exportFolder, firestoreSnapshot);
-                }
-
-                Debug.Log($"<color=green>[AnalyticsReportExporter] Firebase rapor paketi olusturuldu: {exportFolder}</color>");
+                Debug.Log($"<color=green>[AnalyticsReportExporter] {snapshot.Count} satir kaydedildi: {Path.Combine(userFolder, CsvFileName)}</color>");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[AnalyticsReportExporter] Rapor olustururken hata: {ex.Message}");
+                Debug.LogError($"[AnalyticsReportExporter] CSV hatasi: {ex.Message}");
+
+                lock (syncRoot)
+                {
+                    pendingRows.AddRange(snapshot);
+                }
             }
         }
 
-        private Dictionary<string, object> CreateBaseLocalRow()
+        private Dictionary<string, object> CreateBaseRow()
         {
+            DateTime now = DateTime.Now;
             return new Dictionary<string, object>
             {
                 { "sira_no", GetNextSequence() },
-                { "kayit_utc", DateTime.UtcNow.ToString("O") },
-                { "participant_key", ResolveParticipantKey("Bilinmiyor") },
-                { "participant_name", ResolveParticipantName("Bilinmiyor") }
+                { "tarih", now.ToString("dd.MM.yyyy") },
+                { "saat", now.ToString("HH:mm:ss") },
+                { "kaynak", "" },
+                { "olay", "" },
+                { "aciklama", "" },
+                { "katilimci_adi", ResolveParticipantName("Bilinmiyor") },
+                { "modul", "" },
+                { "senaryo", "" },
+                { "gorev", "" },
+                { "hasta", "" },
+                { "test", "" },
+                { "sonuc", "" },
+                { "skor", "" },
+                { "sure_sn", "" },
+                { "detay", "" }
             };
         }
 
@@ -324,351 +218,261 @@ namespace TrainingAnalytics
             }
         }
 
-        private void CreateSnapshots(
-            out List<Dictionary<string, object>> eventSnapshot,
-            out Dictionary<string, List<Dictionary<string, object>>> firestoreSnapshot)
+        private static void ExtractReadableFields(IReadOnlyDictionary<string, object> parameters, IDictionary<string, object> row)
         {
-            lock (syncRoot)
-            {
-                eventSnapshot = CloneRows(analyticsEventRows);
-                firestoreSnapshot = new Dictionary<string, List<Dictionary<string, object>>>();
-
-                foreach (KeyValuePair<string, List<Dictionary<string, object>>> pair in firestoreRowsByCollection)
-                {
-                    firestoreSnapshot[pair.Key] = CloneRows(pair.Value);
-                }
-            }
-        }
-
-        private static List<Dictionary<string, object>> CloneRows(List<Dictionary<string, object>> source)
-        {
-            List<Dictionary<string, object>> copy = new List<Dictionary<string, object>>();
-            if (source == null)
-            {
-                return copy;
-            }
-
-            for (int i = 0; i < source.Count; i++)
-            {
-                copy.Add(new Dictionary<string, object>(source[i]));
-            }
-
-            return copy;
-        }
-
-        private static int CountRows(Dictionary<string, List<Dictionary<string, object>>> tables)
-        {
-            if (tables == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            foreach (KeyValuePair<string, List<Dictionary<string, object>>> pair in tables)
-            {
-                if (pair.Value != null)
-                {
-                    count += pair.Value.Count;
-                }
-            }
-
-            return count;
-        }
-
-        private List<Dictionary<string, object>> BuildSummaryRows(
-            string exportFolder,
-            List<Dictionary<string, object>> eventRows,
-            Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
-        {
-            List<Dictionary<string, object>> rows = new List<Dictionary<string, object>>();
-            AddSummaryRow(rows, "rapor_olusturma_zamani", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            AddSummaryRow(rows, "rapor_klasoru", exportFolder);
-            AddSummaryRow(rows, "katilimci_anahtari", ResolveParticipantKey("Bilinmiyor"));
-            AddSummaryRow(rows, "katilimci_adi", ResolveParticipantName("Bilinmiyor"));
-            AddSummaryRow(rows, "firebase_analytics_event_sayisi", eventRows.Count.ToString(CultureInfo.InvariantCulture));
-            AddSummaryRow(rows, "firestore_dokuman_sayisi", CountRows(firestoreRows).ToString(CultureInfo.InvariantCulture));
-            AddSummaryRow(rows, "session_id", FindLatestValue(eventRows, firestoreRows, AnalyticsParams.SessionId));
-            AddSummaryRow(rows, "installation_id", FindLatestValue(eventRows, firestoreRows, AnalyticsParams.InstallationId));
-
-            AddEventCountRows(rows, eventRows);
-            AddFirestoreCountRows(rows, firestoreRows);
-
-            return rows;
-        }
-
-        private static void AddSummaryRow(List<Dictionary<string, object>> rows, string field, string value)
-        {
-            rows.Add(new Dictionary<string, object>
-            {
-                { "alan", field },
-                { "deger", string.IsNullOrWhiteSpace(value) ? string.Empty : value }
-            });
-        }
-
-        private static void AddEventCountRows(List<Dictionary<string, object>> rows, List<Dictionary<string, object>> eventRows)
-        {
-            Dictionary<string, int> counts = new Dictionary<string, int>();
-            List<string> order = new List<string>();
-
-            for (int i = 0; i < eventRows.Count; i++)
-            {
-                string eventName = GetString(eventRows[i], "event_name", "unknown_event");
-                if (!counts.ContainsKey(eventName))
-                {
-                    counts[eventName] = 0;
-                    order.Add(eventName);
-                }
-
-                counts[eventName]++;
-            }
-
-            for (int i = 0; i < order.Count; i++)
-            {
-                string eventName = order[i];
-                AddSummaryRow(rows, "event_sayisi_" + eventName, counts[eventName].ToString(CultureInfo.InvariantCulture));
-            }
-        }
-
-        private static void AddFirestoreCountRows(
-            List<Dictionary<string, object>> rows,
-            Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
-        {
-            List<string> orderedCollections = GetOrderedCollectionNames(firestoreRows);
-            for (int i = 0; i < orderedCollections.Count; i++)
-            {
-                string collection = orderedCollections[i];
-                int count = firestoreRows.TryGetValue(collection, out List<Dictionary<string, object>> table) && table != null
-                    ? table.Count
-                    : 0;
-                AddSummaryRow(rows, "firestore_sayisi_" + collection, count.ToString(CultureInfo.InvariantCulture));
-            }
-        }
-
-        private static List<Dictionary<string, object>> BuildUnifiedRows(
-            List<Dictionary<string, object>> eventRows,
-            Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
-        {
-            List<Dictionary<string, object>> unified = new List<Dictionary<string, object>>();
-
-            if (eventRows != null)
-            {
-                for (int i = 0; i < eventRows.Count; i++)
-                {
-                    Dictionary<string, object> clone = new Dictionary<string, object>(eventRows[i]);
-                    clone["kaynak"] = "firebase_analytics";
-                    clone["kaynak_detay"] = GetString(clone, "event_name", "firebase_analytics");
-                    unified.Add(clone);
-                }
-            }
-
-            if (firestoreRows != null)
-            {
-                List<string> orderedCollections = GetOrderedCollectionNames(firestoreRows);
-                for (int i = 0; i < orderedCollections.Count; i++)
-                {
-                    string collection = orderedCollections[i];
-                    if (!firestoreRows.TryGetValue(collection, out List<Dictionary<string, object>> rows) || rows == null)
-                    {
-                        continue;
-                    }
-
-                    for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                    {
-                        Dictionary<string, object> clone = new Dictionary<string, object>(rows[rowIndex]);
-                        clone["kaynak"] = "firestore";
-                        clone["kaynak_detay"] = collection;
-                        unified.Add(clone);
-                    }
-                }
-            }
-
-            unified.Sort((a, b) =>
-            {
-                int seqA = ParseSequence(a);
-                int seqB = ParseSequence(b);
-                return seqA.CompareTo(seqB);
-            });
-
-            return unified;
-        }
-
-        private static int ParseSequence(IReadOnlyDictionary<string, object> row)
-        {
-            if (row == null || !row.TryGetValue("sira_no", out object value) || value == null)
-            {
-                return int.MaxValue;
-            }
-
-            if (value is int intValue)
-            {
-                return intValue;
-            }
-
-            if (int.TryParse(ConvertCellToString(value), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
-            {
-                return parsed;
-            }
-
-            return int.MaxValue;
-        }
-
-        private static List<Dictionary<string, object>> CombineFirestoreRows(
-            Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
-        {
-            List<Dictionary<string, object>> combined = new List<Dictionary<string, object>>();
-            List<string> orderedCollections = GetOrderedCollectionNames(firestoreRows);
-
-            for (int i = 0; i < orderedCollections.Count; i++)
-            {
-                string collection = orderedCollections[i];
-                if (!firestoreRows.TryGetValue(collection, out List<Dictionary<string, object>> rows) || rows == null)
-                {
-                    continue;
-                }
-
-                for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                {
-                    combined.Add(new Dictionary<string, object>(rows[rowIndex]));
-                }
-            }
-
-            return combined;
-        }
-
-        private void WriteFirestoreCollectionFiles(
-            string exportFolder,
-            Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
-        {
-            List<string> orderedCollections = GetOrderedCollectionNames(firestoreRows);
-            int fileIndex = 3;
-
-            for (int i = 0; i < orderedCollections.Count; i++)
-            {
-                string collection = orderedCollections[i];
-                if (!firestoreRows.TryGetValue(collection, out List<Dictionary<string, object>> rows) || rows == null || rows.Count == 0)
-                {
-                    continue;
-                }
-
-                string fileName = $"{fileIndex:00}_Firestore_{SanitizeFileNameSegment(collection, "collection")}.csv";
-                WriteDynamicCsv(Path.Combine(exportFolder, fileName), rows, FirestorePreferredColumns);
-                fileIndex++;
-            }
-        }
-
-        private static List<string> GetOrderedCollectionNames(Dictionary<string, List<Dictionary<string, object>>> firestoreRows)
-        {
-            List<string> ordered = new List<string>();
-            if (firestoreRows == null)
-            {
-                return ordered;
-            }
-
-            for (int i = 0; i < FirestoreCollectionOrder.Length; i++)
-            {
-                string collection = FirestoreCollectionOrder[i];
-                if (firestoreRows.ContainsKey(collection))
-                {
-                    ordered.Add(collection);
-                }
-            }
-
-            foreach (KeyValuePair<string, List<Dictionary<string, object>>> pair in firestoreRows)
-            {
-                if (!ordered.Contains(pair.Key))
-                {
-                    ordered.Add(pair.Key);
-                }
-            }
-
-            return ordered;
-        }
-
-        private static string FindLatestValue(
-            List<Dictionary<string, object>> eventRows,
-            Dictionary<string, List<Dictionary<string, object>>> firestoreRows,
-            string key)
-        {
-            string fromEvents = FindLatestValue(eventRows, key);
-            if (!string.IsNullOrWhiteSpace(fromEvents))
-            {
-                return fromEvents;
-            }
-
-            List<string> collections = GetOrderedCollectionNames(firestoreRows);
-            for (int i = collections.Count - 1; i >= 0; i--)
-            {
-                string collection = collections[i];
-                if (!firestoreRows.TryGetValue(collection, out List<Dictionary<string, object>> rows))
-                {
-                    continue;
-                }
-
-                string value = FindLatestValue(rows, key);
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value;
-                }
-            }
-
-            return string.Empty;
-        }
-
-        private static string FindLatestValue(List<Dictionary<string, object>> rows, string key)
-        {
-            if (rows == null || string.IsNullOrWhiteSpace(key))
-            {
-                return string.Empty;
-            }
-
-            for (int i = rows.Count - 1; i >= 0; i--)
-            {
-                string value = GetString(rows[i], key, string.Empty);
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value;
-                }
-            }
-
-            return string.Empty;
-        }
-
-        private static string GetString(IReadOnlyDictionary<string, object> row, string key, string defaultValue)
-        {
-            if (row == null || string.IsNullOrWhiteSpace(key) || !row.TryGetValue(key, out object value) || value == null)
-            {
-                return defaultValue;
-            }
-
-            string text = ConvertCellToString(value);
-            return string.IsNullOrWhiteSpace(text) ? defaultValue : text;
-        }
-
-        private static void CopyParameters(IReadOnlyDictionary<string, object> parameters, IDictionary<string, object> row)
-        {
-            if (parameters == null || row == null)
+            if (parameters == null)
             {
                 return;
             }
 
+            string modulAdi = GetString(parameters, AnalyticsParams.ModuleName);
+            string modulId = GetString(parameters, AnalyticsParams.ModuleId);
+            if (!string.IsNullOrWhiteSpace(modulAdi))
+            {
+                row["modul"] = modulAdi;
+            }
+            else if (!string.IsNullOrWhiteSpace(modulId))
+            {
+                row["modul"] = "Modul " + modulId;
+            }
+
+            string senaryoAdi = GetString(parameters, AnalyticsParams.ScenarioName);
+            string senaryoId = GetString(parameters, AnalyticsParams.ScenarioId);
+            if (!string.IsNullOrWhiteSpace(senaryoAdi))
+            {
+                row["senaryo"] = senaryoAdi;
+            }
+            else if (!string.IsNullOrWhiteSpace(senaryoId))
+            {
+                row["senaryo"] = ResolveScenarioDisplayName(senaryoId);
+            }
+
+            string gorevAdi = GetString(parameters, AnalyticsParams.TaskName);
+            if (!string.IsNullOrWhiteSpace(gorevAdi))
+            {
+                row["gorev"] = gorevAdi;
+            }
+
+            string hastaAdi = GetString(parameters, AnalyticsParams.VictimName);
+            string hastaId = GetString(parameters, AnalyticsParams.VictimId);
+            if (!string.IsNullOrWhiteSpace(hastaAdi))
+            {
+                // detay kolonu " | " ile ayrildigi icin hasta isminde ayni separator
+                // varsa raporu okuyan kisi yanilir. " - " ile guvenli hale getir.
+                row["hasta"] = hastaAdi.Replace(" | ", " - ");
+            }
+            else if (!string.IsNullOrWhiteSpace(hastaId))
+            {
+                row["hasta"] = "Hasta " + hastaId;
+            }
+
+            string testAdi = GetString(parameters, AnalyticsParams.QuizName);
+            if (!string.IsNullOrWhiteSpace(testAdi))
+            {
+                row["test"] = testAdi;
+            }
+
+            string sonuc = BuildSonuc(parameters);
+            if (!string.IsNullOrWhiteSpace(sonuc))
+            {
+                row["sonuc"] = sonuc;
+            }
+
+            string skor = BuildSkor(parameters);
+            if (!string.IsNullOrWhiteSpace(skor))
+            {
+                row["skor"] = skor;
+            }
+
+            string sure = GetString(parameters, AnalyticsParams.DurationSeconds);
+            if (!string.IsNullOrWhiteSpace(sure) && double.TryParse(sure, NumberStyles.Float, CultureInfo.InvariantCulture, out double sn))
+            {
+                // "sn" birim eki: Excel hucreyi sayi degil metin olarak okur ve "8,7"
+                // gibi degerleri yanlislikla "8.Tem" (8 Temmuz) tarihine cevirmez.
+                row["sure_sn"] = FormatDisplayNumber(Math.Round(sn, 1)) + " sn";
+            }
+        }
+
+        private static string BuildSonuc(IReadOnlyDictionary<string, object> parameters)
+        {
+            string dogru = GetString(parameters, AnalyticsParams.IsCorrect);
+            string basarili = GetString(parameters, "basarili");
+            string gorevDurum = GetString(parameters, AnalyticsParams.TaskStatus);
+
+            if (!string.IsNullOrWhiteSpace(dogru))
+            {
+                // Test ozet satirlari secilen=-1 tasir; dogru=false burada cevap sonucu
+                // degil varsayilan degerdir. Bu satirlari "Yanlis" diye gostermek yaniltir.
+                string secilen = GetString(parameters, AnalyticsParams.SelectedAnswerIndex);
+                string tamamlandi = GetString(parameters, "tamamlandi");
+                if (string.Equals(secilen, "-1", StringComparison.Ordinal))
+                {
+                    if (IsFalseValue(tamamlandi))
+                    {
+                        return string.Empty;
+                    }
+
+                    if (IsTrueValue(tamamlandi))
+                    {
+                        return "Tamamlandi";
+                    }
+                }
+
+                return IsTrueValue(dogru)
+                    ? "Dogru"
+                    : "Yanlis";
+            }
+
+            if (!string.IsNullOrWhiteSpace(basarili))
+            {
+                return IsTrueValue(basarili)
+                    ? "Basarili"
+                    : "Basarisiz";
+            }
+
+            if (!string.IsNullOrWhiteSpace(gorevDurum))
+            {
+                return string.Equals(gorevDurum, "failed", StringComparison.OrdinalIgnoreCase)
+                    ? "Basarisiz"
+                    : "Tamamlandi";
+            }
+
+            string hedefModul = GetString(parameters, AnalyticsParams.TargetModuleName);
+            if (!string.IsNullOrWhiteSpace(hedefModul))
+            {
+                string modul = GetString(parameters, AnalyticsParams.ModuleName);
+                return string.IsNullOrWhiteSpace(modul)
+                    ? hedefModul + " istegi"
+                    : modul + " -> " + hedefModul + " istegi";
+            }
+
+            string atanan = GetString(parameters, AnalyticsParams.AssignedTriage);
+            string sonuc = GetString(parameters, AnalyticsParams.ActualTriage);
+            if (!string.IsNullOrWhiteSpace(atanan) && !string.IsNullOrWhiteSpace(sonuc))
+            {
+                return $"{atanan} -> {sonuc}";
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildSkor(IReadOnlyDictionary<string, object> parameters)
+        {
+            string yuzde = GetString(parameters, AnalyticsParams.ScorePercent);
+            string deger = GetString(parameters, AnalyticsParams.ScoreValue);
+            string tamamlandi = GetString(parameters, "tamamlandi");
+            bool explicitlyIncomplete = IsFalseValue(tamamlandi);
+
+            if (!string.IsNullOrWhiteSpace(yuzde) && double.TryParse(yuzde, NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
+            {
+                if (explicitlyIncomplete && string.IsNullOrWhiteSpace(deger))
+                {
+                    return string.Empty;
+                }
+
+                return FormatDisplayNumber(Math.Round(pct, 1)) + "%";
+            }
+
+            if (!string.IsNullOrWhiteSpace(deger))
+            {
+                return deger;
+            }
+
+            return string.Empty;
+        }
+
+        private static bool IsTrueValue(string value)
+        {
+            return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFalseValue(string value)
+        {
+            return string.Equals(value, "false", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "0", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetString(IReadOnlyDictionary<string, object> dict, string key)
+        {
+            if (dict == null || string.IsNullOrWhiteSpace(key) || !dict.TryGetValue(key, out object value) || value == null)
+            {
+                return string.Empty;
+            }
+
+            return ConvertCellToString(value);
+        }
+
+        private string ResolveParticipantKey(string fallback)
+        {
+            lock (syncRoot)
+            {
+                if (!string.IsNullOrWhiteSpace(participantKeyContext))
+                {
+                    return participantKeyContext;
+                }
+            }
+
+            if (ParticipantManager.HasParticipant)
+            {
+                string key = ParticipantManager.GetParticipantKey();
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    return key.Trim();
+                }
+            }
+
+            return fallback;
+        }
+
+        private string ResolveParticipantName(string fallback)
+        {
+            lock (syncRoot)
+            {
+                if (!string.IsNullOrWhiteSpace(participantNameContext))
+                {
+                    return participantNameContext;
+                }
+            }
+
+            if (ParticipantManager.HasParticipant)
+            {
+                string name = ParticipantManager.GetParticipantName();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name.Trim();
+                }
+            }
+
+            return fallback;
+        }
+
+        public static string ResolveReportDirectoryPath()
+        {
+            return Path.GetFullPath(Application.dataPath + "/../CSV Dosyalari");
+        }
+
+        private static string BuildParameterSummary(IReadOnlyDictionary<string, object> parameters)
+        {
+            if (parameters == null || parameters.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            StringBuilder builder = new StringBuilder();
             foreach (KeyValuePair<string, object> pair in parameters)
             {
-                if (string.IsNullOrWhiteSpace(pair.Key))
+                if (builder.Length > 0)
                 {
-                    continue;
+                    builder.Append(" | ");
                 }
 
-                string columnName = AnalyticsService.SanitizeToken(pair.Key, 80, "field");
-                object value = NormalizeExportValue(pair.Value);
-
-                if (row.ContainsKey(columnName) && !string.Equals(ConvertCellToString(row[columnName]), ConvertCellToString(value), StringComparison.Ordinal))
-                {
-                    row["firebase_" + columnName] = value;
-                    continue;
-                }
-
-                row[columnName] = value;
+                builder.Append(pair.Key);
+                builder.Append('=');
+                builder.Append(ConvertCellToString(NormalizeExportValue(pair.Value)));
             }
+
+            return builder.ToString();
         }
 
         private static object NormalizeExportValue(object value)
@@ -695,62 +499,58 @@ namespace TrainingAnalytics
             return value;
         }
 
-        private static string BuildParameterSummary(IReadOnlyDictionary<string, object> parameters)
+        private static void EnsureHeaderIsCompatible(string filePath, List<string> expectedHeaders)
         {
-            if (parameters == null || parameters.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            StringBuilder builder = new StringBuilder();
-            foreach (KeyValuePair<string, object> pair in parameters)
-            {
-                if (builder.Length > 0)
-                {
-                    builder.Append(" | ");
-                }
-
-                builder.Append(pair.Key);
-                builder.Append('=');
-                builder.Append(ConvertCellToString(NormalizeExportValue(pair.Value)));
-            }
-
-            return builder.ToString();
-        }
-
-        private void WriteDynamicCsv(
-            string fullPath,
-            List<Dictionary<string, object>> rows,
-            string[] preferredColumns)
-        {
-            if (rows == null || rows.Count == 0)
+            if (string.IsNullOrWhiteSpace(filePath) || expectedHeaders == null)
             {
                 return;
             }
 
-            List<string> headers = BuildHeaders(rows, preferredColumns);
-            Encoding utf8Bom = new UTF8Encoding(true);
-
-            using (StreamWriter writer = new StreamWriter(fullPath, false, utf8Bom))
+            if (!File.Exists(filePath) || new FileInfo(filePath).Length == 0)
             {
-                writer.WriteLine(BuildCsvLine(headers));
-
-                for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                {
-                    List<string> cells = new List<string>(headers.Count);
-                    for (int headerIndex = 0; headerIndex < headers.Count; headerIndex++)
-                    {
-                        string header = headers[headerIndex];
-                        rows[rowIndex].TryGetValue(header, out object value);
-                        cells.Add(ConvertCellToString(value));
-                    }
-
-                    writer.WriteLine(BuildCsvLine(cells));
-                }
+                return;
             }
+
+            string expectedHeader = BuildCsvLine(expectedHeaders);
+            string existingHeader;
+            using (StreamReader reader = new StreamReader(filePath, Encoding.UTF8, true))
+            {
+                existingHeader = reader.ReadLine();
+            }
+
+            existingHeader = string.IsNullOrEmpty(existingHeader)
+                ? string.Empty
+                : existingHeader.TrimStart('\uFEFF');
+
+            if (string.Equals(existingHeader, expectedHeader, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string backupPath = BuildBackupFilePath(filePath);
+            File.Move(filePath, backupPath);
+            Debug.LogWarning($"[AnalyticsReportExporter] CSV basligi uyumsuzdu, eski dosya yedeklendi: {backupPath}");
         }
 
-        private static List<string> BuildHeaders(List<Dictionary<string, object>> rows, string[] preferredColumns)
+        private static string BuildBackupFilePath(string filePath)
+        {
+            string directory = Path.GetDirectoryName(filePath);
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+            string extension = Path.GetExtension(filePath);
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+            string candidate = Path.Combine(directory, $"{fileName}_{timestamp}{extension}");
+            int suffix = 1;
+
+            while (File.Exists(candidate))
+            {
+                candidate = Path.Combine(directory, $"{fileName}_{timestamp}_{suffix}{extension}");
+                suffix++;
+            }
+
+            return candidate;
+        }
+
+        private static List<string> BuildHeaders(string[] preferredColumns)
         {
             List<string> headers = new List<string>();
             HashSet<string> included = new HashSet<string>();
@@ -760,14 +560,6 @@ namespace TrainingAnalytics
                 for (int i = 0; i < preferredColumns.Length; i++)
                 {
                     AddHeader(headers, included, preferredColumns[i]);
-                }
-            }
-
-            for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-            {
-                foreach (KeyValuePair<string, object> pair in rows[rowIndex])
-                {
-                    AddHeader(headers, included, pair.Key);
                 }
             }
 
@@ -848,47 +640,12 @@ namespace TrainingAnalytics
             }
         }
 
-        private string ResolveParticipantKey(string fallback)
+        private static string FormatDisplayNumber(double value)
         {
-            if (ParticipantManager.HasParticipant)
-            {
-                string playerPrefsKey = ParticipantManager.GetParticipantKey();
-                if (!string.IsNullOrWhiteSpace(playerPrefsKey))
-                {
-                    return playerPrefsKey.Trim();
-                }
-            }
-
-            lock (syncRoot)
-            {
-                return string.IsNullOrWhiteSpace(participantKeyContext) ? fallback : participantKeyContext;
-            }
+            return value.ToString("0.#", CultureInfo.GetCultureInfo("tr-TR"));
         }
 
-        private string ResolveParticipantName(string fallback)
-        {
-            if (ParticipantManager.HasParticipant)
-            {
-                string playerPrefsName = ParticipantManager.GetParticipantName();
-                if (!string.IsNullOrWhiteSpace(playerPrefsName))
-                {
-                    return playerPrefsName.Trim();
-                }
-            }
-
-            lock (syncRoot)
-            {
-                return string.IsNullOrWhiteSpace(participantNameContext) ? fallback : participantNameContext;
-            }
-        }
-
-        private static string ResolveReportDirectoryPath()
-        {
-            // Consistent with MainMenuManager OpenReportsFolder logic.
-            return Path.Combine(Application.persistentDataPath, "Reports");
-        }
-
-        private static string SanitizeFileNameSegment(string value, string fallback)
+        private static string SanitizeFileName(string value, string fallback)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -919,39 +676,71 @@ namespace TrainingAnalytics
             return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
         }
 
-        private string FormatEventName(string rawEvent)
+        private static string FormatEventName(string rawEvent)
         {
             switch (rawEvent)
             {
-                case AnalyticsEventNames.ModuleEntered: return "Modul Girisi";
-                case AnalyticsEventNames.ModuleCompleted: return "Modul Bitirildi";
-                case AnalyticsEventNames.ModuleTransitionIntent: return "Modul Gecis Niyeti";
+                case AnalyticsEventNames.ModuleEntered: return "Modul Acildi";
+                case AnalyticsEventNames.ModuleCompleted: return "Modul Tamamlandi";
+                case AnalyticsEventNames.ModuleTransitionIntent: return "Modul Gecis Istegi";
                 case AnalyticsEventNames.ContentOpened: return "Icerik Acildi";
-                case AnalyticsEventNames.VideoStarted: return "Video Baslatildi";
-                case AnalyticsEventNames.VideoProgress: return "Video Ilerlemesi";
+                case AnalyticsEventNames.VideoStarted: return "Video Izlenmeye Baslandi";
+                case AnalyticsEventNames.VideoProgress: return "Video Izleniyor";
                 case AnalyticsEventNames.VideoCompleted: return "Video Tamamlandi";
                 case AnalyticsEventNames.InfographicOpened: return "Infografik Acildi";
-                case AnalyticsEventNames.LearningContentCompleted: return "Ogrenme Icerigi Tamamlandi";
-                case AnalyticsEventNames.TaskStarted: return "Gorev Baslatildi";
-                case AnalyticsEventNames.TaskProgress: return "Gorev Ilerlemesi";
+                case AnalyticsEventNames.LearningContentCompleted: return "Icerik Tamamlandi";
+                case AnalyticsEventNames.TaskStarted: return "Goreve Baslandi";
+                case AnalyticsEventNames.TaskProgress: return "Gorev Devam Ediyor";
                 case AnalyticsEventNames.TaskFailed: return "Gorev Basarisiz";
                 case AnalyticsEventNames.TaskCompleted: return "Gorev Tamamlandi";
                 case AnalyticsEventNames.HelpRequested: return "Yardim Istendi";
-                case AnalyticsEventNames.TriageStarted: return "Triyaj Baslatildi";
-                case AnalyticsEventNames.VictimInteracted: return "Yaraliyla Etkilesim";
-                case AnalyticsEventNames.VictimTagged: return "Triyaj Atamasi";
+                case AnalyticsEventNames.TriageStarted: return "Triyaj Baslandi";
+                case AnalyticsEventNames.VictimInteracted: return "Hastaya Dokunuldu";
+                case AnalyticsEventNames.VictimTagged: return "Hasta Etiketlendi";
                 case AnalyticsEventNames.AIPanelOpened: return "AI Panel Acildi";
                 case AnalyticsEventNames.AIQuestionAsked: return "AI Soru Soruldu";
-                case AnalyticsEventNames.QuizStarted: return "Test Baslatildi";
+                case AnalyticsEventNames.QuizStarted: return "Teste Baslandi";
                 case AnalyticsEventNames.QuizAnswered: return "Soru Cevaplandi";
-                case AnalyticsEventNames.QuizCompleted: return "Test Bitti";
+                case AnalyticsEventNames.QuizCompleted: return "Test Tamamlandi";
                 case AnalyticsEventNames.ScoreRecorded: return "Skor Kaydedildi";
-                case AnalyticsEventNames.ScenarioStarted: return "Senaryo Baslatildi";
-                case AnalyticsEventNames.CriticalActionTaken: return "Kritik Aksiyon";
+                case AnalyticsEventNames.ScenarioStarted: return "Senaryo Baslandi";
+                case AnalyticsEventNames.CriticalActionTaken: return "Kritik Aksiyon Alindi";
                 case AnalyticsEventNames.ScenarioTaskCompleted: return "Senaryo Gorevi Tamamlandi";
-                case AnalyticsEventNames.ScenarioCompleted: return "Senaryo Bitti";
-                case AnalyticsEventNames.TriageDialogOpened: return "Triyaj Diyalogu Acildi";
+                case AnalyticsEventNames.ScenarioCompleted: return "Senaryo Tamamlandi";
+                case AnalyticsEventNames.TriageDialogOpened: return "Triyaj Dialogu Acildi";
                 default: return rawEvent;
+            }
+        }
+
+        private static string ResolveScenarioDisplayName(string scenarioId)
+        {
+            // Bilinen senaryo ID'lerini insan okur Turkce isimlere maple. Boylece CSV'nin
+            // 'senaryo' kolonu raw "Senaryo first_aid_rescue" yerine duzgun gorunur.
+            switch (scenarioId)
+            {
+                case "first_aid_rescue":
+                    return TrainingAnalyticsFacade.Module2ScenarioName;
+                case "hospital_triage":
+                    return TrainingAnalyticsFacade.Module3ScenarioName;
+                case "yangin_mudahale":
+                    return TrainingAnalyticsFacade.Module4ScenarioName;
+                default:
+                    return "Senaryo " + scenarioId;
+            }
+        }
+
+        private static string FormatCollectionName(string collection)
+        {
+            switch (collection)
+            {
+                case "katilimcilar": return "Katilimci Profili Kaydedildi";
+                case "oturumlar": return "Oturum Ozeti Kaydedildi";
+                case "moduller": return "Modul Ilerlemesi Kaydedildi";
+                case "gorevler": return "Gorev Sonucu Kaydedildi";
+                case "testler": return "Test Sonucu Kaydedildi";
+                case "ai_etkilesim": return "AI Etkilesim Kaydedildi";
+                case "triage_sonuc": return "Triage Sonucu Kaydedildi";
+                default: return collection + " Kaydedildi";
             }
         }
     }

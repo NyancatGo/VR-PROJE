@@ -16,7 +16,14 @@ public class Fire : MonoBehaviour
             if (health <= 0)
             {
                 Extinguish();
-                TaskManager.Instance.Firefire();
+                var taskManager = TaskManager.Instance;
+                if (taskManager == null)
+                {
+                    Debug.LogWarning("[Fire] TaskManager.Instance is null. Fire extinguish could not be counted.");
+                    return;
+                }
+
+                taskManager.Firefire();
             }
         }
     }

@@ -155,13 +155,6 @@ public class ModulSecimController : MonoBehaviour
             scrollUISample.SetActive(false);
         }
 
-        TrainingAnalyticsFacade.TrackModuleTransitionIntent(
-            TrainingAnalyticsFacade.Module1Id,
-            TrainingAnalyticsFacade.Module1Name,
-            selectedModuleId,
-            selectedModuleName,
-            "dropdown");
-
         Debug.Log("Modul secildi: " + modulDropdown.options[index].text + " -> Sahne: " + selectedSceneName);
     }
 
@@ -194,6 +187,21 @@ public class ModulSecimController : MonoBehaviour
         StartCoroutine(LoadSceneRoutine(resolvedSceneName));
     }
 
+    private void TrackConfirmedModuleTransition()
+    {
+        if (string.IsNullOrWhiteSpace(selectedModuleId) || string.IsNullOrWhiteSpace(selectedModuleName))
+        {
+            return;
+        }
+
+        TrainingAnalyticsFacade.TrackModuleTransitionIntent(
+            TrainingAnalyticsFacade.Module1Id,
+            TrainingAnalyticsFacade.Module1Name,
+            selectedModuleId,
+            selectedModuleName,
+            "onay");
+    }
+
     private IEnumerator LoadSceneRoutine(string sceneName)
     {
         XRSceneRuntimeStabilizer.PrepareForSceneTransition();
@@ -208,6 +216,8 @@ public class ModulSecimController : MonoBehaviour
             SetLoadingUiState(true);
             yield break;
         }
+
+        TrackConfirmedModuleTransition();
 
         while (!loadOperation.isDone)
         {

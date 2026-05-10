@@ -45,6 +45,16 @@ public class VRKeyboardManager : MonoBehaviour
     private float keyboardInteractionGraceUntil;
     private int virtualCaretPosition;
     private bool suppressInputSelectedSync;
+    private TMP_InputField activeInputFieldOverride;
+    // Records the input field that the user EXPLICITLY asked us to type into
+    // (set by Configure / SyncReferences / SyncTargetInputField / select-from-
+    // EventSystem). Survives EventSystem juggling when a keyboard button takes
+    // selection. Used as the source of truth on every keystroke so the field
+    // never silently snaps back to a stale default (e.g., Ad after the user
+    // selected Soyad).
+    private TMP_InputField intentInputField;
+    [Header("Diagnostics")]
+    [SerializeField] private bool verboseInputTrace;
     private RectTransform virtualCaretIndicator;
     private Image virtualCaretImage;
 
@@ -59,10 +69,12 @@ public class VRKeyboardManager : MonoBehaviour
     {
         AutoAssignReferences();
         RegisterListeners();
+        RegisterAutoRetargetForAllInputs();
     }
 
     private void OnDisable()
     {
+        UnregisterAutoRetargetForAllInputs();
         UnregisterListeners();
         StopActiveRoutines();
         ApplyHiddenStateInstant();
@@ -156,6 +168,8 @@ public class VRKeyboardManager : MonoBehaviour
         RectTransform panel)
     {
         targetInputField = inputField;
+        activeInputFieldOverride = inputField;
+        if (inputField != null) intentInputField = inputField;
         sendButton = sendButtonReference;
         keyboardDrawer = drawer;
         keyboardCanvasGroup = drawerCanvasGroup;
@@ -175,6 +189,8 @@ public class VRKeyboardManager : MonoBehaviour
         }
 
         targetInputField = inputField;
+        activeInputFieldOverride = inputField;
+        if (inputField != null) intentInputField = inputField;
         sendButton = sendButtonReference;
         AutoAssignReferences();
         ApplyAnimationPreset();
@@ -184,6 +200,22 @@ public class VRKeyboardManager : MonoBehaviour
         if (shouldRebind)
         {
             RegisterListeners();
+        }
+    }
+
+    public void SyncTargetInputField(TMP_InputField inputField)
+    {
+        if (inputField == null)
+        {
+            return;
+        }
+
+        intentInputField = inputField;
+        activeInputFieldOverride = inputField;
+        SyncReferences(inputField, sendButton);
+        if (verboseInputTrace)
+        {
+            Debug.Log("[VRKeyboardManager] SyncTargetInputField → " + inputField.name);
         }
     }
 
@@ -239,9 +271,15 @@ public class VRKeyboardManager : MonoBehaviour
     /// </summary>
     public void HandleCharacter(string character)
     {
+        ResolveActiveInputField();
         if (string.IsNullOrEmpty(character) || targetInputField == null)
         {
             return;
+        }
+
+        if (verboseInputTrace)
+        {
+            Debug.Log("[VRKeyboardManager] HandleCharacter '" + character + "' → " + targetInputField.name);
         }
 
         PrepareForKeyboardInput();
@@ -255,6 +293,7 @@ public class VRKeyboardManager : MonoBehaviour
 
     public void HandleBackspace()
     {
+        ResolveActiveInputField();
         if (targetInputField == null)
         {
             return;
@@ -277,6 +316,7 @@ public class VRKeyboardManager : MonoBehaviour
 
     public void HandleClearAll()
     {
+        ResolveActiveInputField();
         if (targetInputField == null)
         {
             return;
@@ -288,6 +328,7 @@ public class VRKeyboardManager : MonoBehaviour
 
     public void HandleMoveCaretLeft()
     {
+        ResolveActiveInputField();
         if (targetInputField == null)
         {
             return;
@@ -300,6 +341,7 @@ public class VRKeyboardManager : MonoBehaviour
 
     public void HandleMoveCaretRight()
     {
+        ResolveActiveInputField();
         if (targetInputField == null)
         {
             return;
@@ -313,6 +355,7 @@ public class VRKeyboardManager : MonoBehaviour
 
     public void HandleEnter()
     {
+        ResolveActiveInputField();
         PrepareForKeyboardInput();
 
         if (sendButton != null && sendButton.interactable)
@@ -367,6 +410,12 @@ public class VRKeyboardManager : MonoBehaviour
 
     private void HandleInputSelected(string _)
     {
+        activeInputFieldOverride = targetInputField;
+        if (IsInputFieldUsable(targetInputField))
+        {
+            intentInputField = targetInputField;
+        }
+
         if (!suppressInputSelectedSync)
         {
             SyncVirtualCaretWithInput();
@@ -444,6 +493,7 @@ public class VRKeyboardManager : MonoBehaviour
 
     private void PrepareForKeyboardInput()
     {
+        ResolveActiveInputField();
         ExtendKeyboardVisibility(0.75f);
         if (deselectRoutine != null)
         {
@@ -463,6 +513,151 @@ public class VRKeyboardManager : MonoBehaviour
             virtualCaretPosition = Mathf.Clamp(virtualCaretPosition, 0, textLength);
             DetachTmpInputSelection();
         }
+    }
+
+    private void ResolveActiveInputField()
+    {
+        // Priority order:
+        //   1) Whatever TMP_InputField is currently selected on this keyboard.
+        //   2) The intent field (last input the user explicitly clicked /
+        //      that an external caller asked us to type into). Survives
+        //      EventSystem juggling caused by pressing keyboard buttons.
+        //   3) Existing activeInputFieldOverride.
+        //   4) Existing targetInputField.
+        TMP_InputField selectedInput = GetSelectedInputFieldForThisKeyboard();
+        if (selectedInput != null)
+        {
+            activeInputFieldOverride = selectedInput;
+            intentInputField = selectedInput;
+        }
+        else if (IsInputFieldUsable(intentInputField))
+        {
+            // Pressing a virtual key transfers EventSystem selection to the
+            // button. Without this branch activeInputFieldOverride could be
+            // stale or get nulled by the scope check below, causing the
+            // caret to silently fall back to a previous field.
+            activeInputFieldOverride = intentInputField;
+        }
+
+        if (!IsInputFieldUsable(activeInputFieldOverride))
+        {
+            // No usable override; keep targetInputField as-is so we don't
+            // accidentally snap back to AutoAssignReferences' first-found
+            // field (which is what was happening on the second click).
+            return;
+        }
+
+        // Scope check is informational only now. Previously, a failed scope
+        // check would null activeInputFieldOverride which then forced a
+        // re-snap to the default. We instead leave it alone — Configure /
+        // SyncReferences / SyncTargetInputField are the only authoritative
+        // entry points for changing scope.
+        if (targetInputField != activeInputFieldOverride)
+        {
+            SyncReferences(activeInputFieldOverride, sendButton);
+            if (verboseInputTrace)
+            {
+                Debug.Log("[VRKeyboardManager] ResolveActiveInputField → re-bound to " +
+                          activeInputFieldOverride.name);
+            }
+        }
+    }
+
+    private static bool IsInputFieldUsable(TMP_InputField field)
+    {
+        return field != null && field.gameObject != null && field.gameObject.activeInHierarchy;
+    }
+
+    // Auto-retarget: every TMP_InputField under this keyboard's hierarchy
+    // gets an onSelect listener that pulls the keyboard target onto itself.
+    // This guarantees correct behaviour even when no LoginPanelController /
+    // LoginInputFieldRouter is wired in the scene — the keyboard self-binds
+    // the moment a user clicks (or programmatically focuses) any input field.
+    private readonly System.Collections.Generic.List<TMP_InputField> autoRetargetSubscribed =
+        new System.Collections.Generic.List<TMP_InputField>();
+
+    private void RegisterAutoRetargetForAllInputs()
+    {
+        UnregisterAutoRetargetForAllInputs();
+        TMP_InputField[] inputs = GetComponentsInChildren<TMP_InputField>(true);
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            TMP_InputField input = inputs[i];
+            if (input == null) continue;
+            input.onSelect.AddListener(HandleAnyInputSelectedAutoRetarget);
+            autoRetargetSubscribed.Add(input);
+        }
+        if (verboseInputTrace)
+        {
+            Debug.Log("[VRKeyboardManager] AutoRetarget subscribed to " + autoRetargetSubscribed.Count + " inputs");
+        }
+    }
+
+    private void UnregisterAutoRetargetForAllInputs()
+    {
+        for (int i = 0; i < autoRetargetSubscribed.Count; i++)
+        {
+            TMP_InputField input = autoRetargetSubscribed[i];
+            if (input == null) continue;
+            input.onSelect.RemoveListener(HandleAnyInputSelectedAutoRetarget);
+        }
+        autoRetargetSubscribed.Clear();
+    }
+
+    // Fires when *any* input under this keyboard receives focus. Captures the
+    // user's intent so the next keystroke goes to the field they actually
+    // selected, regardless of whether targetInputField was previously bound to
+    // a different field in the Inspector.
+    private void HandleAnyInputSelectedAutoRetarget(string _)
+    {
+        // Use EventSystem.current as the source of truth: the field that
+        // fired the event is the one the user just selected.
+        EventSystem es = EventSystem.current;
+        TMP_InputField selected = null;
+        if (es != null && es.currentSelectedGameObject != null)
+        {
+            selected = es.currentSelectedGameObject.GetComponent<TMP_InputField>();
+        }
+        if (selected == null)
+        {
+            // Fallback: walk our subscribed inputs and pick whichever one is
+            // currently focused. (Edge case: programmatic Select before the
+            // EventSystem has updated currentSelectedGameObject.)
+            for (int i = 0; i < autoRetargetSubscribed.Count; i++)
+            {
+                TMP_InputField cand = autoRetargetSubscribed[i];
+                if (cand != null && cand.isFocused) { selected = cand; break; }
+            }
+        }
+        if (!IsInputFieldUsable(selected)) return;
+
+        intentInputField = selected;
+        activeInputFieldOverride = selected;
+        if (targetInputField != selected)
+        {
+            SyncReferences(selected, sendButton);
+        }
+        if (verboseInputTrace)
+        {
+            Debug.Log("[VRKeyboardManager] AutoRetarget → " + selected.name);
+        }
+    }
+
+    private TMP_InputField GetSelectedInputFieldForThisKeyboard()
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null || eventSystem.currentSelectedGameObject == null)
+        {
+            return null;
+        }
+
+        TMP_InputField selectedInput = eventSystem.currentSelectedGameObject.GetComponentInParent<TMP_InputField>();
+        if (selectedInput == null || selectedInput.GetComponentInParent<VRKeyboardManager>() != this)
+        {
+            return null;
+        }
+
+        return selectedInput;
     }
 
     private void ReplaceSelection(string insertedText)
@@ -668,12 +863,22 @@ public class VRKeyboardManager : MonoBehaviour
             return;
         }
 
+        Transform expectedParent = targetInputField.textComponent.transform;
+
+        // Hedef input degisince (Ad -> Soyad gibi) indikatori yeni alana tasi.
+        // Aksi halde imlec eski alanin icinde kalmis gibi gorunur.
+        if (virtualCaretIndicator != null && virtualCaretIndicator.parent != expectedParent)
+        {
+            virtualCaretIndicator.SetParent(expectedParent, false);
+            virtualCaretIndicator.SetAsLastSibling();
+        }
+
         if (virtualCaretIndicator != null && virtualCaretImage != null)
         {
             return;
         }
 
-        Transform existing = targetInputField.textComponent.transform.Find("Virtual_Caret");
+        Transform existing = expectedParent.Find("Virtual_Caret");
         GameObject indicatorObject;
         if (existing != null)
         {
@@ -682,7 +887,7 @@ public class VRKeyboardManager : MonoBehaviour
         else
         {
             indicatorObject = new GameObject("Virtual_Caret", typeof(RectTransform), typeof(Image));
-            indicatorObject.transform.SetParent(targetInputField.textComponent.transform, false);
+            indicatorObject.transform.SetParent(expectedParent, false);
         }
 
         virtualCaretIndicator = indicatorObject.GetComponent<RectTransform>();
@@ -1353,9 +1558,23 @@ public class VRKeyboardManager : MonoBehaviour
     {
         ApplyAnimationPreset();
 
-        if (targetInputField == null)
+        // Honour explicit user intent first — never let AutoAssign rewind to
+        // the first child input if the user has already picked a different
+        // one by clicking it.
+        if (IsInputFieldUsable(intentInputField))
+        {
+            targetInputField = intentInputField;
+            activeInputFieldOverride = intentInputField;
+        }
+        else if (targetInputField == null)
         {
             targetInputField = GetComponentInChildren<TMP_InputField>(true);
+            activeInputFieldOverride = targetInputField;
+        }
+
+        if (activeInputFieldOverride == null)
+        {
+            activeInputFieldOverride = targetInputField;
         }
 
         if (sendButton == null)

@@ -2,6 +2,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using TrainingAnalytics;
 
 namespace TriyajModul3
 {
@@ -52,6 +53,7 @@ namespace TriyajModul3
             }
 
             Debug.Log("[ModuleReturnToSceneButton] Sahne yukleniyor: " + resolvedSceneName);
+            TryTrackModule4Return(resolvedSceneName);
             XRSceneRuntimeStabilizer.PrepareForSceneTransition();
             XRCameraHelper.ClearCache();
             AsyncOperation loadOperation = SceneManager.LoadSceneAsync(resolvedSceneName, LoadSceneMode.Single);
@@ -94,6 +96,28 @@ namespace TriyajModul3
             }
 
             return string.Empty;
+        }
+
+        private static void TryTrackModule4Return(string resolvedSceneName)
+        {
+            string activeSceneKey = NormalizeSceneKey(SceneManager.GetActiveScene().name);
+            if (activeSceneKey != "MODUL4YANGINMUDAHALE")
+            {
+                return;
+            }
+
+            string targetSceneKey = NormalizeSceneKey(resolvedSceneName);
+            if (targetSceneKey != "MODUL1")
+            {
+                return;
+            }
+
+            TrainingAnalyticsFacade.TrackModuleTransitionIntent(
+                TrainingAnalyticsFacade.Module4Id,
+                TrainingAnalyticsFacade.Module4Name,
+                TrainingAnalyticsFacade.Module1Id,
+                TrainingAnalyticsFacade.Module1Name,
+                "return_button");
         }
 
         private static bool CanLoadScene(string sceneName)

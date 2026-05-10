@@ -619,15 +619,15 @@ public class HospitalTriageManager : MonoBehaviour
                 { AnalyticsParams.TotalCount, snapshot.totalCount },
                 { AnalyticsParams.CorrectCount, snapshot.correctCount },
                 { AnalyticsParams.IncorrectCount, snapshot.incorrectCount },
-                { "completion_percent", Mathf.Round(snapshot.completionPercent * 100f) / 100f },
-                { "duration_seconds", Mathf.Round(snapshot.durationSeconds * 100f) / 100f },
-                { "active_decision_seconds", Mathf.Round(snapshot.activeDecisionSeconds * 100f) / 100f },
-                { "average_decision_seconds", Mathf.Round(snapshot.averageDecisionSeconds * 100f) / 100f },
-                { "patients_per_minute", Mathf.Round(snapshot.patientsPerMinute * 100f) / 100f },
-                { "under_triage_count", snapshot.underTriageCount },
-                { "over_triage_count", snapshot.overTriageCount },
-                { "critical_mismatch_count", snapshot.criticalMismatchCount },
-                { "longest_correct_streak", snapshot.longestCorrectStreak }
+                { AnalyticsParams.CompletionPercent, Mathf.Round(snapshot.completionPercent * 100f) / 100f },
+                { AnalyticsParams.DurationSeconds, Mathf.Round(snapshot.durationSeconds * 100f) / 100f },
+                { AnalyticsParams.ActiveDecisionSeconds, Mathf.Round(snapshot.activeDecisionSeconds * 100f) / 100f },
+                { AnalyticsParams.AverageDecisionSeconds, Mathf.Round(snapshot.averageDecisionSeconds * 100f) / 100f },
+                { AnalyticsParams.PatientsPerMinute, Mathf.Round(snapshot.patientsPerMinute * 100f) / 100f },
+                { AnalyticsParams.UnderTriageCount, snapshot.underTriageCount },
+                { AnalyticsParams.OverTriageCount, snapshot.overTriageCount },
+                { AnalyticsParams.CriticalMismatchCount, snapshot.criticalMismatchCount },
+                { AnalyticsParams.LongestCorrectStreak, snapshot.longestCorrectStreak }
             };
 
             TrainingAnalyticsFacade.OnScoreRecorded(

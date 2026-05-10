@@ -169,10 +169,28 @@ public class VRUIClickHelper : MonoBehaviour
         TMP_InputField inputField = target.GetComponentInParent<TMP_InputField>();
         if (inputField != null)
         {
-            eventSystem.SetSelectedGameObject(inputField.gameObject);
-            inputField.Select();
-            inputField.ActivateInputField();
+            VRKeyboardManager keyboardManager = inputField.GetComponentInParent<VRKeyboardManager>();
+            if (keyboardManager != null)
+            {
+                keyboardManager.SyncTargetInputField(inputField);
+            }
+
+            if (eventSystem.currentSelectedGameObject != inputField.gameObject)
+            {
+                eventSystem.SetSelectedGameObject(inputField.gameObject);
+            }
+            if (!inputField.isFocused)
+            {
+                inputField.Select();
+                inputField.ActivateInputField();
+            }
             inputField.MoveTextEnd(false);
+
+            if (keyboardManager != null)
+            {
+                keyboardManager.ShowKeyboard();
+            }
+
             TrySendHapticPulse(bestRay);
             return;
         }

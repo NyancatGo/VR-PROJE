@@ -17,94 +17,102 @@ namespace TrainingAnalytics
 
     public static class AnalyticsEventNames
     {
-        public const string ModuleEntered = "module_entered";
-        public const string ModuleCompleted = "module_completed";
-        public const string ModuleTransitionIntent = "module_transition_intent";
-        public const string ContentOpened = "content_opened";
-        public const string VideoStarted = "video_started";
-        public const string VideoProgress = "video_progress";
-        public const string VideoCompleted = "video_completed";
-        public const string InfographicOpened = "infographic_opened";
-        public const string LearningContentCompleted = "learning_content_completed";
-        public const string TaskStarted = "task_started";
-        public const string TaskProgress = "task_progress";
-        public const string TaskFailed = "task_failed";
-        public const string TaskCompleted = "task_completed";
-        public const string HelpRequested = "help_requested";
-        public const string TriageStarted = "triage_started";
-        public const string VictimInteracted = "victim_interacted";
-        public const string VictimTagged = "victim_tagged";
-        public const string AIPanelOpened = "ai_panel_opened";
-        public const string AIQuestionAsked = "ai_question_asked";
-        public const string QuizStarted = "quiz_started";
-        public const string QuizAnswered = "quiz_answered";
-        public const string QuizCompleted = "quiz_completed";
-        public const string ScoreRecorded = "score_recorded";
-        public const string ScenarioStarted = "scenario_started";
-        public const string CriticalActionTaken = "critical_action_taken";
-        public const string ScenarioTaskCompleted = "scenario_task_completed";
-        public const string ScenarioCompleted = "scenario_completed";
-        public const string TriageDialogOpened = "triage_dialog_opened";
+        public const string ModuleEntered = "modul_ac";
+        public const string ModuleCompleted = "modul_bitti";
+        public const string ModuleTransitionIntent = "modul_gecis";
+        public const string ContentOpened = "icerik_ac";
+        public const string VideoStarted = "video_baslat";
+        public const string VideoProgress = "video_ilerle";
+        public const string VideoCompleted = "video_bitti";
+        public const string InfographicOpened = "infografik_ac";
+        public const string LearningContentCompleted = "icerik_bitti";
+        public const string TaskStarted = "gorev_baslat";
+        public const string TaskProgress = "gorev_ilerle";
+        public const string TaskFailed = "gorev_basarisiz";
+        public const string TaskCompleted = "gorev_bitti";
+        public const string HelpRequested = "yardim";
+        public const string TriageStarted = "triage_baslat";
+        public const string VictimInteracted = "hasta_dokun";
+        public const string VictimTagged = "hasta_etiket";
+        public const string AIPanelOpened = "ai_panel_ac";
+        public const string AIQuestionAsked = "ai_soru";
+        public const string QuizStarted = "test_baslat";
+        public const string QuizAnswered = "cevap_ver";
+        public const string QuizCompleted = "test_bitti";
+        public const string ScoreRecorded = "skor_kaydet";
+        public const string ScenarioStarted = "senaryo_baslat";
+        public const string CriticalActionTaken = "kritik_aksiyon";
+        public const string ScenarioTaskCompleted = "senaryo_gorev_bitti";
+        public const string ScenarioCompleted = "senaryo_bitti";
+        public const string TriageDialogOpened = "triage_dialog_ac";
     }
 
     public static class AnalyticsParams
     {
-        public const string InstallationId = "installation_id";
-        public const string SessionId = "session_id";
-        public const string BuildVersion = "build_version";
-        public const string SceneName = "scene_name";
-        public const string RuntimePlatform = "runtime_platform";
-        public const string ModuleId = "module_id";
-        public const string ModuleName = "module_name";
-        public const string ScenarioId = "scenario_id";
-        public const string ScenarioName = "scenario_name";
-        public const string ContentId = "content_id";
-        public const string ContentName = "content_name";
-        public const string ContentType = "content_type";
-        public const string ContentGroupId = "content_group_id";
-        public const string ContentGroupName = "content_group_name";
-        public const string OpenedCount = "opened_count";
-        public const string CompletedCount = "completed_count";
-        public const string TotalCount = "total_count";
-        public const string DurationSeconds = "duration_seconds";
-        public const string TaskId = "task_id";
-        public const string TaskName = "task_name";
-        public const string TaskType = "task_type";
-        public const string TaskStatus = "task_status";
-        public const string TaskProgress = "task_progress";
-        public const string VictimId = "victim_id";
-        public const string VictimName = "victim_name";
-        public const string VictimIndex = "victim_index";
-        public const string AssignedTriage = "assigned_triage";
-        public const string ActualTriage = "actual_triage";
-        public const string IsCorrect = "is_correct";
-        public const string CorrectCount = "correct_count";
-        public const string IncorrectCount = "incorrect_count";
-        public const string HelpContext = "help_context";
+        public const string InstallationId = "kurulum_id";
+        public const string SessionId = "oturum_id";
+        public const string BuildVersion = "surum";
+        public const string SceneName = "sahne";
+        public const string RuntimePlatform = "platform";
+        public const string ModuleId = "modul_id";
+        public const string ModuleName = "modul_adi";
+        public const string ScenarioId = "senaryo_id";
+        public const string ScenarioName = "senaryo_adi";
+        public const string ContentId = "icerik_id";
+        public const string ContentName = "icerik_adi";
+        public const string ContentType = "icerik_turu";
+        public const string ContentGroupId = "grup_id";
+        public const string ContentGroupName = "grup_adi";
+        public const string OpenedCount = "acilma";
+        public const string CompletedCount = "tamamlanan";
+        public const string TotalCount = "toplam";
+        public const string DurationSeconds = "sure";
+        public const string TaskId = "gorev_id";
+        public const string TaskName = "gorev_adi";
+        public const string TaskType = "gorev_turu";
+        public const string TaskStatus = "gorev_durum";
+        public const string TaskProgress = "gorev_ilerleme";
+        public const string VictimId = "hasta_id";
+        public const string VictimName = "hasta_adi";
+        public const string VictimIndex = "hasta_idx";
+        public const string AssignedTriage = "atanan";
+        public const string ActualTriage = "sonuc";
+        public const string IsCorrect = "dogru";
+        public const string CorrectCount = "dogru_adet";
+        public const string IncorrectCount = "yanlis_adet";
+        public const string HelpContext = "yardim_yeri";
         public const string PanelId = "panel_id";
-        public const string PanelName = "panel_name";
-        public const string AiQuestionType = "ai_question_type";
-        public const string QuizId = "quiz_id";
-        public const string QuizName = "quiz_name";
-        public const string AnsweredCount = "answered_count";
-        public const string QuestionIndex = "question_index";
-        public const string SelectedAnswerIndex = "selected_answer_index";
-        public const string CorrectAnswerIndex = "correct_answer_index";
-        public const string ScoreValue = "score_value";
-        public const string ScorePercent = "score_percent";
-        public const string ActionId = "action_id";
-        public const string ActionName = "action_name";
-        public const string CompletionSource = "completion_source";
-        public const string EntrySource = "entry_source";
-        public const string SelectionSource = "selection_source";
-        public const string Source = "source";
-        public const string StepIndex = "step_index";
-        public const string StepName = "step_name";
-        public const string PlacementCount = "placement_count";
-        public const string TotalPlacements = "total_placements";
-        public const string TargetModuleId = "target_module_id";
-        public const string TargetModuleName = "target_module_name";
-        public const string TransitionSource = "transition_source";
+        public const string PanelName = "panel_adi";
+        public const string AiQuestionType = "ai_soru_turu";
+        public const string QuizId = "test_id";
+        public const string QuizName = "test_adi";
+        public const string AnsweredCount = "cevaplanan";
+        public const string QuestionIndex = "soru_idx";
+        public const string SelectedAnswerIndex = "secilen";
+        public const string CorrectAnswerIndex = "dogru_secenek";
+        public const string ScoreValue = "skor";
+        public const string ScorePercent = "skor_yuzde";
+        public const string ActionId = "aksiyon_id";
+        public const string ActionName = "aksiyon_adi";
+        public const string CompletionSource = "tamamlama_kaynak";
+        public const string EntrySource = "giris_kaynak";
+        public const string SelectionSource = "secim_kaynak";
+        public const string Source = "kaynak";
+        public const string StepIndex = "adim_idx";
+        public const string StepName = "adim_adi";
+        public const string PlacementCount = "yerlestirme";
+        public const string TotalPlacements = "toplam_yerlestirme";
+        public const string TargetModuleId = "hedef_modul_id";
+        public const string TargetModuleName = "hedef_modul_adi";
+        public const string TransitionSource = "gecis_kaynak";
+        public const string CompletionPercent = "tamamlanma_yuzde";
+        public const string ActiveDecisionSeconds = "aktif_karar_sure";
+        public const string AverageDecisionSeconds = "ortalama_karar_sure";
+        public const string PatientsPerMinute = "dakika_hasta";
+        public const string UnderTriageCount = "eksik_triage_adet";
+        public const string OverTriageCount = "fazla_triage_adet";
+        public const string CriticalMismatchCount = "kritik_uyumsuz_adet";
+        public const string LongestCorrectStreak = "en_uzun_dogru_seri";
     }
 
     [DefaultExecutionOrder(-10000)]
@@ -289,6 +297,7 @@ namespace TrainingAnalytics
             }
 
             TryWriteFirestoreTelemetry(sanitizedEventName, mergedParameters);
+            firestoreTelemetryWriter.WriteDetailedEvent(sanitizedEventName, mergedParameters);
 
             if (string.Equals(sanitizedEventName, AnalyticsEventNames.ModuleTransitionIntent, StringComparison.Ordinal))
             {
@@ -324,6 +333,117 @@ namespace TrainingAnalytics
             firestoreTelemetryWriter.FlushSession();
         }
 
+        public void SetBaselineProfile(BaselineProfile profile)
+        {
+            firestoreTelemetryWriter.SetBaselineProfile(profile);
+        }
+
+        public void ClearBaselineProfile()
+        {
+            firestoreTelemetryWriter.ClearBaselineProfile();
+        }
+
+        public void WriteModuleBaseline(string moduleId, string moduleName, float durationSeconds)
+        {
+            firestoreTelemetryWriter.WriteModuleProgressBaseline(
+                moduleId,
+                moduleName,
+                durationSeconds,
+                BuildModuleDocId(moduleId));
+        }
+
+        public void WriteTaskBaseline(TaskResult taskResult)
+        {
+            firestoreTelemetryWriter.WriteTaskResultBaseline(taskResult, BuildTaskDocId(taskResult));
+        }
+
+        public void WriteQuizBaseline(QuizResult quizResult)
+        {
+            firestoreTelemetryWriter.WriteQuizResultBaseline(quizResult, BuildQuizDocId(quizResult));
+        }
+
+        public void WriteAIInteractionBaseline(AIInteractionResult interaction)
+        {
+            firestoreTelemetryWriter.WriteAIInteractionBaseline(interaction, BuildAIInteractionDocId(interaction));
+        }
+
+        public void WriteTriageBaseline(string eventName, IReadOnlyDictionary<string, object> parameters)
+        {
+            firestoreTelemetryWriter.WriteTriageResultBaseline(eventName, parameters, BuildTriageDocId(eventName, parameters));
+        }
+
+        private string BuildModuleDocId(string moduleId)
+        {
+            if (string.IsNullOrWhiteSpace(moduleId) || string.IsNullOrWhiteSpace(sessionTracker.SessionId))
+            {
+                return null;
+            }
+
+            return sessionTracker.SessionId + "_" + moduleId;
+        }
+
+        private string BuildTaskDocId(TaskResult taskResult)
+        {
+            return BuildDetailDocId("task", taskResult.moduleId, taskResult.taskId, taskResult.targetId);
+        }
+
+        private string BuildQuizDocId(QuizResult quizResult)
+        {
+            return BuildDetailDocId("quiz", quizResult.moduleId, quizResult.quizId);
+        }
+
+        private string BuildAIInteractionDocId(AIInteractionResult interaction)
+        {
+            return BuildDetailDocId("ai", interaction.moduleId, interaction.panelId);
+        }
+
+        private string BuildTriageDocId(string eventName, IReadOnlyDictionary<string, object> parameters)
+        {
+            string moduleId = ExtractStringParameter(parameters, AnalyticsParams.ModuleId, string.Empty);
+            string victimId = ExtractStringParameter(parameters, AnalyticsParams.VictimId, string.Empty);
+            if (!string.IsNullOrWhiteSpace(victimId))
+            {
+                return BuildDetailDocId("triage", moduleId, "victim", victimId);
+            }
+
+            string scoreType = ExtractStringParameter(parameters, AnalyticsParams.TaskType, string.Empty);
+            if (string.Equals(eventName, AnalyticsEventNames.ScoreRecorded, StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(scoreType))
+            {
+                return BuildDetailDocId("triage", moduleId, "score", scoreType);
+            }
+
+            return BuildDetailDocId("triage", moduleId, eventName);
+        }
+
+        private string BuildDetailDocId(string category, params string[] parts)
+        {
+            if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(sessionTracker.SessionId))
+            {
+                return null;
+            }
+
+            StringBuilder builder = new StringBuilder(sessionTracker.SessionId);
+            builder.Append('_');
+            builder.Append(SanitizeToken(category, 32, "detail"));
+
+            if (parts != null)
+            {
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(parts[i]))
+                    {
+                        continue;
+                    }
+
+                    builder.Append('_');
+                    builder.Append(SanitizeToken(parts[i], 48, "item"));
+                }
+            }
+
+            return builder.ToString();
+        }
+
         public void ExportLocalReport()
         {
             FlushSessionTelemetry();
@@ -339,16 +459,31 @@ namespace TrainingAnalytics
 
             switch (eventName)
             {
-                case AnalyticsEventNames.ModuleEntered:
                 case AnalyticsEventNames.ModuleCompleted:
+                    // moduller koleksiyonu yalnızca "modül tamamlandı" özetini
+                    // tutar. ModuleEntered random docId ile append edildiğinde
+                    // moduller koleksiyonunda "completed=false" gerçek satırlar
+                    // bırakıyordu (ahmet_uysal: 2 gerçek doc, ikisi de entered,
+                    // hiç completion yok). Entered olayı zaten event log /
+                    // detaylar tarafında izleniyor; moduller'da tekrar tutmak
+                    // raporu kirletiyor. Bu yüzden artık sadece Completed
+                    // moduller'a deterministic SetAsync ile yazılıyor.
                     ModuleProgressSummary moduleProgress = new ModuleProgressSummary
                     {
                         moduleId = ExtractStringParameter(parameters, AnalyticsParams.ModuleId, string.Empty),
                         moduleName = ExtractStringParameter(parameters, AnalyticsParams.ModuleName, string.Empty),
-                        completed = string.Equals(eventName, AnalyticsEventNames.ModuleCompleted, StringComparison.Ordinal),
+                        completed = true,
                         durationSeconds = ExtractFloatParameter(parameters, AnalyticsParams.DurationSeconds, 0f)
                     };
-                    firestoreTelemetryWriter.WriteModuleProgress(moduleProgress);
+                    firestoreTelemetryWriter.WriteModuleProgress(
+                        moduleProgress,
+                        BuildModuleDocId(moduleProgress.moduleId));
+                    break;
+
+                case AnalyticsEventNames.ModuleEntered:
+                    // Sessizce geç — modül girişi event log'unda tutuluyor
+                    // (TrackEvent event_log akışı). moduller koleksiyonu
+                    // sadece tamamlanma özetini bekler.
                     break;
 
                 case AnalyticsEventNames.TaskStarted:
@@ -359,25 +494,28 @@ namespace TrainingAnalytics
                 case AnalyticsEventNames.VideoProgress:
                 case AnalyticsEventNames.VideoCompleted:
                 case AnalyticsEventNames.ScenarioTaskCompleted:
-                    firestoreTelemetryWriter.WriteTaskResult(BuildTaskResultFromParameters(eventName, parameters));
+                    TaskResult taskResult = BuildTaskResultFromParameters(eventName, parameters);
+                    firestoreTelemetryWriter.WriteTaskResult(taskResult, BuildTaskDocId(taskResult));
                     break;
 
                 case AnalyticsEventNames.QuizStarted:
                 case AnalyticsEventNames.QuizAnswered:
                 case AnalyticsEventNames.QuizCompleted:
-                    firestoreTelemetryWriter.WriteQuizResult(BuildQuizResultFromParameters(eventName, parameters));
+                    QuizResult quizResult = BuildQuizResultFromParameters(eventName, parameters);
+                    firestoreTelemetryWriter.WriteQuizResult(quizResult, BuildQuizDocId(quizResult));
                     break;
 
                 case AnalyticsEventNames.AIPanelOpened:
                 case AnalyticsEventNames.AIQuestionAsked:
-                    firestoreTelemetryWriter.WriteAIInteraction(BuildAiInteractionFromParameters(eventName, parameters));
+                    AIInteractionResult aiInteraction = BuildAiInteractionFromParameters(eventName, parameters);
+                    firestoreTelemetryWriter.WriteAIInteraction(aiInteraction, BuildAIInteractionDocId(aiInteraction));
                     break;
             }
 
             if (string.Equals(eventName, AnalyticsEventNames.VictimTagged, StringComparison.Ordinal) ||
                 string.Equals(eventName, AnalyticsEventNames.ScoreRecorded, StringComparison.Ordinal))
             {
-                firestoreTelemetryWriter.WriteTriageResult(eventName, parameters);
+                firestoreTelemetryWriter.WriteTriageResult(eventName, parameters, BuildTriageDocId(eventName, parameters));
             }
         }
 

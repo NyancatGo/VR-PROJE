@@ -68,6 +68,11 @@ Desktop.ini
 opencode.json
 hidden_changes.conf
 ignore.conf
+CODEX_REVIEW_PROMPT.md
+
+# Unity Visual Scripting local generated cache
+[Aa]ssets/Unity.VisualScripting.Generated/
+[Aa]ssets/Unity.VisualScripting.Generated.meta
 
 # Local logs and diagnostics
 *.log
@@ -75,3 +80,4 @@ build_*.txt
 
 # CSV export dosyalari
 CSV Dosyalari/
+FirebaseCSV/
